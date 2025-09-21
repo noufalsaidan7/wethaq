@@ -43,8 +43,11 @@ class WethaqHome extends StatelessWidget {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Icon(Icons.account_circle,
-                          size: 120, color: darkGreen.withOpacity(0.9)),
+                      Icon(
+                        Icons.account_circle,
+                        size: 120,
+                        color: darkGreen.withOpacity(0.9),
+                      ),
                       Positioned(
                         right: 8,
                         bottom: 12,
@@ -63,8 +66,11 @@ class WethaqHome extends StatelessWidget {
                             ],
                             border: Border.all(color: darkGreen, width: 5.0),
                           ),
-                          child: Icon(Icons.access_time_filled,
-                              size: 28, color: darkGreen),
+                          child: Icon(
+                            Icons.access_time_filled,
+                            size: 28,
+                            color: darkGreen,
+                          ),
                         ),
                       ),
                     ],
@@ -98,7 +104,9 @@ class WethaqHome extends StatelessWidget {
                   color: darkGreen,
                   onTap: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ParentLoginPage()),
+                      MaterialPageRoute(
+                        builder: (_) => const ParentLoginPage(),
+                      ),
                     );
                   },
                 ),
@@ -139,10 +147,7 @@ class _RoleButton extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                color.withOpacity(.95),
-                color,
-              ],
+              colors: [color.withOpacity(.95), color],
             ),
             boxShadow: const [
               BoxShadow(
@@ -211,12 +216,22 @@ class _ParentLoginPageState extends State<ParentLoginPage> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 8),
-              const Text('Wethaq',
-                  style: TextStyle(
-                      fontSize: 34, fontWeight: FontWeight.w700, color: Colors.black87)),
+              const Text(
+                'Wethaq',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
               const SizedBox(height: 6),
-              Text('Welcome',
-                  style: TextStyle(fontSize: 18, color: Colors.black.withOpacity(.7))),
+              Text(
+                'Welcome',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.black.withOpacity(.7),
+                ),
+              ),
               const SizedBox(height: 16),
 
               Container(
@@ -270,11 +285,14 @@ class _ParentLoginPageState extends State<ParentLoginPage> {
                             borderRadius: BorderRadius.circular(22),
                           ),
                         ),
-                        child: Text('Log in',
-                            style: TextStyle(
-                                color: darkGreen,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700)),
+                        child: Text(
+                          'Log in',
+                          style: TextStyle(
+                            color: darkGreen,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -284,8 +302,10 @@ class _ParentLoginPageState extends State<ParentLoginPage> {
               const SizedBox(height: 14),
               TextButton(
                 onPressed: () {},
-                child: const Text('Forgot your password?',
-                    style: TextStyle(color: Color(0xFFD5443D))),
+                child: const Text(
+                  'Forgot your password?',
+                  style: TextStyle(color: Color(0xFFD5443D)),
+                ),
               ),
             ],
           ),
@@ -302,8 +322,10 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(left: 6, bottom: 6),
-    child: Text(text,
-        style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
+    child: Text(
+      text,
+      style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600),
+    ),
   );
 }
 
@@ -342,12 +364,17 @@ class _Field extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hint,
           prefixIcon: icon != null
-              ? IconButton(icon: Icon(icon, color: Colors.black54), onPressed: onIconTap)
+              ? IconButton(
+                  icon: Icon(icon, color: Colors.black54),
+                  onPressed: onIconTap,
+                )
               : null,
           filled: true,
           fillColor: fill,
-          contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(24),
             borderSide: BorderSide.none,

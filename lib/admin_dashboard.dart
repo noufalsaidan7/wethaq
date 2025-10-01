@@ -1,143 +1,205 @@
-import 'dart:async';
+// lib/admin_dashboard.dart
 import 'dart:convert';
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+const String baseUrl =
+    'http://192.168.1.28/wethaq'; // عدّلي هنا لمكان السيرفر عندك
+
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
-
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
-const String baseUrl = String.fromEnvironment(
-  'API_BASE',
-  defaultValue: 'http://192.168.1.13/wethaq',
-);
-
 class _AdminDashboardState extends State<AdminDashboard>
     with TickerProviderStateMixin {
-  // ألوان
+  // form keys & selection
+  final GlobalKey<FormState> _parentFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _childFormKey = GlobalKey<FormState>();
+
+  // colors
   static const Color kGreen = Color(0xFF507C5C);
   static const Color kPanelLight = Color(0xFFE6F0EA);
   static const Color kButtonBg = Color(0xFFE4EFE7);
 
-  // تبويبات
+  // tabs
   int _selectedIndex = 0;
 
-  // بروفايل الأدمن
+  // admin info
   String adminName = 'System Admin';
   String adminEmail = 'admin@wethaq.com';
 
-  // بيانات داخلية (تظهر فورًا ثم تتزامن مع الخادم)
-  // ملاحظة: سنخزن user_id عندما يرجع من السيرفر ليدعم التعديل/الحذف.
-  final Map<String, Map<String, dynamic>> staffData = {};
-  final Map<String, Map<String, dynamic>> parentData = {};
+  // lists
+  List<Map<String, dynamic>> staffList = [];
+  List<Map<String, dynamic>> parentList = [];
+  List<Map<String, dynamic>> childList = [];
 
-  // نهايات الـ API
-  static const String staffAddApi = '$baseUrl/add_staff.php';
-  static const String parentAddApi = '$baseUrl/add_parent.php';
-  static const String staffUpdateApi = '$baseUrl/update_staff.php';
-  static const String parentUpdateApi = '$baseUrl/update_parent.php';
-  static const String staffDeleteApi = '$baseUrl/delete_staff.php';
-  static const String parentDeleteApi = '$baseUrl/delete_parent.php';
-  static const String getUserApi = '$baseUrl/get_user_detail.php'; // GET ?email=...
+  bool _loadingStaff = false;
+  bool _loadingParents = false;
+  bool _loadingChildren = false;
 
-  // ===== Helpers =====
-  String _generatePassword([int length = 8]) {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rnd = Random.secure();
-    return String.fromCharCodes(Iterable.generate(
-        length, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+  // endpoints
+  String get listStaffApi => '$baseUrl/list_staff.php';
+  String get listParentsApi => '$baseUrl/list_parents.php';
+  String get listChildrenApi => '$baseUrl/list_children.php';
+  String get staffAddApi => '$baseUrl/add_staff.php';
+  String get parentAddApi => '$baseUrl/add_parent.php';
+  String get parentUpdateApi => '$baseUrl/update_parent.php';
+  String get childAddApi => '$baseUrl/add_child.php';
+  String get staffDeleteApi => '$baseUrl/delete_staff.php';
+  String get parentDeleteApi => '$baseUrl/delete_parent.php';
+  String get childDeleteApi => '$baseUrl/delete_child.php';
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAll();
   }
 
-  Future<Map<String, dynamic>> _postJson(String url, Map<String, String> body,
-      {Duration timeout = const Duration(seconds: 20)}) async {
-    debugPrint('POST $url BODY=$body');
-    final res =
-        await http.post(Uri.parse(url), body: body).timeout(timeout);
-    debugPrint('RES ${res.statusCode} ${res.body}');
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-    final decoded = jsonDecode(res.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('Invalid JSON: ${res.body}');
-    }
-    return decoded;
+  Future<void> _refreshAll() async {
+    await Future.wait([fetchStaff(), fetchParents(), fetchChildren()]);
   }
 
-  Future<Map<String, dynamic>> _getJson(String url,
-      {Duration timeout = const Duration(seconds: 20)}) async {
-    debugPrint('GET $url');
-    final res = await http.get(Uri.parse(url)).timeout(timeout);
-    debugPrint('RES ${res.statusCode} ${res.body}');
-    if (res.statusCode != 200) {
+  Future<void> fetchStaff() async {
+    setState(() => _loadingStaff = true);
+    try {
+      final res = await http
+          .get(Uri.parse(listStaffApi))
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map && data['status'] == 'success') {
+          final items = (data['items'] as List?) ?? [];
+          staffList = items.map((e) => Map<String, dynamic>.from(e)).toList();
+        } else {
+          staffList = [];
+        }
+      } else {
+        staffList = [];
+      }
+    } catch (_) {
+      staffList = [];
+    }
+    if (mounted) setState(() => _loadingStaff = false);
+  }
+
+  Future<void> fetchParents() async {
+    setState(() => _loadingParents = true);
+    try {
+      final res = await http
+          .get(Uri.parse(listParentsApi))
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map && data['status'] == 'success') {
+          final items = (data['items'] as List?) ?? [];
+          parentList = items.map((e) => Map<String, dynamic>.from(e)).toList();
+        } else
+          parentList = [];
+      } else
+        parentList = [];
+    } catch (_) {
+      parentList = [];
+    }
+    if (mounted) setState(() => _loadingParents = false);
+  }
+
+  Future<void> fetchChildren() async {
+    setState(() => _loadingChildren = true);
+    try {
+      final url = Uri.parse('$baseUrl/list_children.php');
+      final res = await http.get(url).timeout(const Duration(seconds: 15));
+
+      if (res.statusCode != 200) {
+        throw Exception('HTTP ${res.statusCode}: ${res.body}');
+      }
+
+      final data = jsonDecode(res.body);
+      if (data is Map && data['status'] == 'success') {
+        // يدعم children أو items (توافق مع القديم)
+        final list = (data['children'] ?? data['items'] ?? []) as List;
+        setState(() {
+          childList = List<Map<String, dynamic>>.from(
+            list.map((e) => Map<String, dynamic>.from(e as Map)),
+          );
+        });
+      } else {
+        throw Exception(
+            (data is Map ? data['message'] : null) ?? 'Unknown error');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Children fetch failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingChildren = false);
+    }
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+      String url, Map<String, String> body) async {
+    final res = await http
+        .post(Uri.parse(url), body: body)
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200)
       throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
     final decoded = jsonDecode(res.body);
-    if (decoded is! Map<String, dynamic>) {
+    if (decoded is! Map<String, dynamic>)
       throw Exception('Invalid JSON: ${res.body}');
-    }
     return decoded;
   }
 
   void _snack(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<int?> _ensureUserIdByEmail(String email) async {
-    try {
-      final data =
-          await _getJson('$getUserApi?email=${Uri.encodeComponent(email)}');
-      if (data['status'] == 'success') {
-        final user = data['user'] as Map<String, dynamic>?;
-        return user?['id'] is int
-            ? user!['id'] as int
-            : int.tryParse('${user?['id']}');
-      }
-    } catch (e) {
-      debugPrint('ensureUserId error: $e');
-    }
-    return null;
-  }
-
-  Future<bool> _confirmDelete(String title, String message) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel')),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: kGreen, foregroundColor: Colors.white),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
+  // ===== UI =====
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: _buildAppBar(),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        titleSpacing: 0,
+        title: const Row(
+          children: [
+            SizedBox(width: 12),
+            Text('Wethaq',
+                style: TextStyle(
+                    fontFamily: 'serif',
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    color: kGreen)),
+            SizedBox(width: 8),
+            Text('Admin',
+                style: TextStyle(
+                    color: Colors.black54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+        actions: [
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0),
+              child: _Avatar(initials: _initials(adminName))),
+          IconButton(
+              tooltip: 'Logout',
+              icon: const Icon(Icons.logout, color: Colors.black87),
+              onPressed: _confirmLogout),
+        ],
+      ),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
           _buildOverviewTab(),
           _buildStaffTab(),
           _buildParentsTab(),
+          _buildChildrenTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -150,311 +212,989 @@ class _AdminDashboardState extends State<AdminDashboard>
           BottomNavigationBarItem(icon: Icon(Icons.badge), label: 'Staff'),
           BottomNavigationBarItem(
               icon: Icon(Icons.family_restroom), label: 'Parents'),
+          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Children'),
         ],
       ),
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0.5,
-      titleSpacing: 0,
-      title: const Row(
-        children: [
-          SizedBox(width: 12),
-          Text(
-            'Wethaq',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'serif',
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              color: kGreen,
-            ),
-          ),
-          SizedBox(width: 8),
-          Text(
-            'Admin',
-            style: TextStyle(
-                color: Colors.black54, fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0),
-          child: _Avatar(initials: _initials(adminName)),
-        ),
-        IconButton(
-          tooltip: 'Logout',
-          icon: const Icon(Icons.logout, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ],
-    );
-  }
-
-  // ============ TAB 1: OVERVIEW ============
   Widget _buildOverviewTab() {
-    final staffCount = staffData.length;
-    final parentCount = parentData.length;
-    final childrenCount = parentData.values.fold<int>(
-      0,
-      (sum, p) =>
-          sum +
-          (((p['children'] as List<Map<String, String>>?)?.length) ?? 0),
-    );
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
+    final staffCount = staffList.length;
+    final parentCount = parentList.length;
+    final childrenCount = childList.length;
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(children: [
           _GlassCard(
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(12),
-              leading: _Avatar(initials: _initials(adminName), big: true),
-              title: Text(
-                adminName,
+              child: ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            leading: _Avatar(initials: _initials(adminName), big: true),
+            title: Text(adminName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
-                    color: Colors.black87),
-              ),
-              subtitle: Text(
-                adminEmail,
+                    color: Colors.black87)),
+            subtitle: Text(adminEmail,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.black54),
-              ),
-              trailing: ElevatedButton.icon(
+                style: const TextStyle(color: Colors.black54)),
+            trailing: ElevatedButton.icon(
                 onPressed: _openEditProfileSheet,
                 icon: const Icon(Icons.edit),
                 label: const Text('Edit'),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: kButtonBg, foregroundColor: kGreen),
-              ),
-            ),
-          ),
+                    backgroundColor: kButtonBg, foregroundColor: kGreen)),
+          )),
           const SizedBox(height: 16),
-
-          const _GlassCard(
-            child: ListTile(
-              leading: Icon(Icons.badge, color: kGreen),
-              title: Text('Staff', style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -56),
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Text('$staffCount',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
-              ),
-            ),
-          ),
+          _statCard(
+              icon: Icons.badge,
+              title: 'Staff',
+              count: staffCount,
+              loading: _loadingStaff,
+              onTap: () => setState(() => _selectedIndex = 1)),
           const SizedBox(height: 8),
-
-          const _GlassCard(
-            child: ListTile(
-              leading: Icon(Icons.family_restroom, color: kGreen),
-              title:
-                  Text('Parents', style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -56),
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Text('$parentCount',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
-              ),
-            ),
-          ),
+          _statCard(
+              icon: Icons.family_restroom,
+              title: 'Parents',
+              count: parentCount,
+              loading: _loadingParents,
+              onTap: () => setState(() => _selectedIndex = 2)),
           const SizedBox(height: 8),
-
-          const _GlassCard(
-            child: ListTile(
-              leading: Icon(Icons.school, color: kGreen),
-              title: Text('Children',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -56),
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Text('$childrenCount',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
-              ),
-            ),
-          ),
-
-          // ملاحظة: تم إزالة "Recent activity" حسب طلبك
-        ],
+          _statCard(
+              icon: Icons.school,
+              title: 'Children',
+              count: childrenCount,
+              loading: _loadingChildren,
+              onTap: () => setState(() => _selectedIndex = 3)),
+        ]),
       ),
     );
   }
 
-  // ============ TAB 2: STAFF ============
+  Widget _statCard(
+      {required IconData icon,
+      required String title,
+      required int count,
+      required bool loading,
+      VoidCallback? onTap}) {
+    return _GlassCard(
+        child: ListTile(
+      onTap: onTap,
+      leading: Icon(icon, color: kGreen),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      trailing: loading
+          ? const SizedBox(
+              width: 22, height: 22, child: CircularProgressIndicator())
+          : Text('$count',
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+    ));
+  }
+
   Widget _buildStaffTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          ElevatedButton.icon(
-            onPressed: _openAddStaffSheet,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Staff'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kButtonBg,
-              foregroundColor: kGreen,
-              minimumSize: const Size(double.infinity, 48),
+    return RefreshIndicator(
+        onRefresh: fetchStaff,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            ElevatedButton.icon(
+                onPressed: _openAddStaffSheet,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Staff'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kButtonBg,
+                    foregroundColor: kGreen,
+                    minimumSize: const Size(double.infinity, 48))),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _loadingStaff
+                  ? const Center(child: CircularProgressIndicator())
+                  : staffList.isEmpty
+                      ? const _EmptyState(
+                          icon: Icons.badge,
+                          title: 'No staff yet',
+                          subtitle:
+                              'Tap “Add Staff” to create the first member.')
+                      : ListView.separated(
+                          itemCount: staffList.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (c, i) {
+                            final s = staffList[i];
+                            final name = '${s['name'] ?? '-'}';
+                            final email = '${s['email'] ?? '-'}';
+                            final phone = '${s['phone'] ?? '-'}';
+                            return _GlassCard(
+                                child: ListTile(
+                              leading: _Avatar(initials: _initials(name)),
+                              title: Text(name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text('Email: $email\nPhone: $phone',
+                                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                              isThreeLine: true,
+                              trailing: Wrap(spacing: 6, children: [
+                                IconButton(
+                                    tooltip: 'Edit',
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.black87),
+                                    onPressed: () => _openEditStaffSheet(s)),
+                                IconButton(
+                                    tooltip: 'Delete',
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.redAccent),
+                                    onPressed: () => _deleteStaff(s)),
+                              ]),
+                              onTap: () => _openEditStaffSheet(s),
+                            ));
+                          }),
             ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: staffData.isEmpty
-                ? const _EmptyState(
-                    icon: Icons.badge,
-                    title: 'No staff yet',
-                    subtitle: 'Tap “Add Staff” to create the first member.')
-                : ListView.separated(
-                    itemCount: staffData.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final name = staffData.keys.elementAt(i);
-                      final s = staffData[name]!;
-                      return _GlassCard(
-                        child: ListTile(
-                          leading: _Avatar(initials: _initials(name)),
-                          title: Text(name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            'Email: ${s['email']}\nPhone: ${s['phone']}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          isThreeLine: true,
-                          trailing: Wrap(
-                            spacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              IconButton(
-                                tooltip: 'Edit',
-                                icon: const Icon(Icons.edit, color: Colors.black87),
-                                onPressed: () => _openEditStaffSheet(name),
-                              ),
-                              IconButton(
-                                tooltip: 'Delete',
-                                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                onPressed: () => _deleteStaff(name),
-                              ),
-                              _CopyablePasswordChip(password: s['password']),
-                              _SyncIcon(synced: s['synced'] == true),
-                            ],
-                          ),
-                          onTap: () => _openEditStaffSheet(name),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
+          ]),
+        ));
   }
 
-  // ============ TAB 3: PARENTS ============
   Widget _buildParentsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          ElevatedButton.icon(
-            onPressed: _openAddParentSheet,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Parent'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kButtonBg,
-              foregroundColor: kGreen,
-              minimumSize: const Size(double.infinity, 48),
+    return RefreshIndicator(
+        onRefresh: fetchParents,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            ElevatedButton.icon(
+                onPressed: _openAddParentSheet,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Parent'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kButtonBg,
+                    foregroundColor: kGreen,
+                    minimumSize: const Size(double.infinity, 48))),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _loadingParents
+                  ? const Center(child: CircularProgressIndicator())
+                  : parentList.isEmpty
+                      ? const _EmptyState(
+                          icon: Icons.family_restroom,
+                          title: 'No parents yet',
+                          subtitle:
+                              'Tap “Add Parent” to create the first parent.')
+                      : ListView.separated(
+                          itemCount: parentList.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (c, i) {
+                            final p = parentList[i];
+                            final name = '${p['name'] ?? '-'}';
+                            final email = '${p['email'] ?? '-'}';
+                            final phone = '${p['phone'] ?? '-'}';
+                            final childCount = childList
+                                .where((c) =>
+                                    '${c['parent_user_id']}' == '${p['id']}')
+                                .length;
+                            return _GlassCard(
+                                child: ListTile(
+                              leading: _Avatar(initials: _initials(name)),
+                              title: Text(name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text(
+                                  'Email: $email\nPhone: $phone\nChildren: $childCount',
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis),
+                              isThreeLine: true,
+                              trailing: Wrap(spacing: 6, children: [
+                                IconButton(
+                                    tooltip: 'Edit',
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.black87),
+                                    onPressed: () => _openEditParentSheet(p)),
+                                IconButton(
+                                    tooltip: 'Delete',
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.redAccent),
+                                    onPressed: () => _deleteParent(p)),
+                              ]),
+                              onTap: () => _openEditParentSheet(p),
+                            ));
+                          }),
             ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: parentData.isEmpty
-                ? const _EmptyState(
-                    icon: Icons.family_restroom,
-                    title: 'No parents yet',
-                    subtitle:
-                        'Tap “Add Parent” to create the first parent.')
-                : ListView.separated(
-                    itemCount: parentData.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) {
-                      final name = parentData.keys.elementAt(i);
-                      final p = parentData[name]!;
-                      final children =
-                          (p['children'] as List<Map<String, String>>?) ?? [];
-                      final staff = p['staff']?.toString() ?? '-';
+          ]),
+        ));
+  }
 
-                      return _GlassCard(
-                        child: ListTile(
-                          leading: _Avatar(initials: _initials(name)),
-                          title: Text(name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            'Email: ${p['email']}\nPhone: ${p['phone']}\nStaff: $staff\nChildren: ${children.map((c) => c['name']).join(', ')}',
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          isThreeLine: true,
-                          trailing: Wrap(
-                            spacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              IconButton(
-                                tooltip: 'Edit',
-                                icon: const Icon(Icons.edit, color: Colors.black87),
-                                onPressed: () => _openEditParentSheet(name),
+  // ===== Children =====
+  Widget _buildChildrenTab() {
+    return RefreshIndicator(
+      onRefresh: fetchChildren,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // ← هذا الزر هو اللي كان مختفي
+            ElevatedButton.icon(
+              onPressed: _openAddChildSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Child'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kButtonBg,
+                foregroundColor: kGreen,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Expanded(
+              child: _loadingChildren
+                  ? const Center(child: CircularProgressIndicator())
+                  : childList.isEmpty
+                      ? const _EmptyState(
+                          icon: Icons.school,
+                          title: 'No children yet',
+                          subtitle:
+                              'Tap “Add Child” to create the first child (must be linked to a parent).',
+                        )
+                      : ListView.separated(
+                          itemCount: childList.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, i) {
+                            final c = childList[i];
+                            final name =
+                                '${c['child_name'] ?? c['name'] ?? '-'}';
+                            final klass =
+                                '${c['class'] ?? c['class_name'] ?? '-'}';
+                            final pId =
+                                '${c['parent_user_id'] ?? c['parent_id'] ?? ''}';
+                            final parentName = parentList
+                                    .firstWhere(
+                                      (p) => '${p['id']}' == pId,
+                                      orElse: () => const {},
+                                    )['name']
+                                    ?.toString() ??
+                                '-';
+
+                            return _GlassCard(
+                              child: ListTile(
+                                leading: const Icon(Icons.emoji_people,
+                                    color: kGreen),
+                                title: Text(name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                  'Class: $klass\nParent: $parentName',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Edit',
+                                      icon: const Icon(Icons.edit,
+                                          color: Colors.black87),
+                                      onPressed: () => _openEditChildSheet(c),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.redAccent),
+                                      onPressed: () => _deleteChild(c),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              IconButton(
-                                tooltip: 'Delete',
-                                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                onPressed: () => _deleteParent(name),
-                              ),
-                              _CopyablePasswordChip(password: p['password']),
-                              _SyncIcon(synced: p['synced'] == true),
-                            ],
-                          ),
-                          onTap: () => _openEditParentSheet(name),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ======== BottomSheets ========
+  // ===== BottomSheets & Actions =====
+
   void _openEditProfileSheet() {
     final nameCtrl = TextEditingController(text: adminName);
     final emailCtrl = TextEditingController(text: adminEmail);
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) {
+          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+          final safeBottom = MediaQuery.of(ctx).padding.bottom;
+          return SafeArea(
+              top: false,
+              child: Padding(
+                  padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 20,
+                      bottom: viewInsets + safeBottom + 16),
+                  child: SingleChildScrollView(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const _SheetTitle('Edit Profile'),
+                    TextField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Name')),
+                    const SizedBox(height: 12),
+                    TextField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                if (nameCtrl.text.trim().isNotEmpty)
+                                  adminName = nameCtrl.text.trim();
+                                if (emailCtrl.text.trim().isNotEmpty)
+                                  adminEmail = emailCtrl.text.trim();
+                              });
+                              Navigator.pop(ctx);
+                              _snack('Profile updated');
+                            },
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: kGreen,
+                                foregroundColor: Colors.white),
+                            child: const Text('Save'))),
+                  ]))));
+        });
+  }
+
+  // ---- Staff add/edit/delete ----
+  void _openAddStaffSheet() {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final empCtrl = TextEditingController();
+    String password = _generatePassword();
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) {
+          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+          final safeBottom = MediaQuery.of(ctx).padding.bottom;
+          return StatefulBuilder(
+              builder: (ctx, setM) => SafeArea(
+                  top: false,
+                  child: Padding(
+                      padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 20,
+                          bottom: viewInsets + safeBottom + 16),
+                      child: SingleChildScrollView(
+                          child: Form(
+                              key: formKey,
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const _SheetHeader(title: 'Add Staff'),
+                                    TextFormField(
+                                        controller: nameCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Name'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: emailCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Email'),
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: phoneCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Phone Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: empCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText:
+                                                'Employee Number (4 digits)'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) => (v == null ||
+                                                v.trim().isEmpty ||
+                                                v.trim().length < 4)
+                                            ? 'Required 4 digits'
+                                            : null),
+                                    const SizedBox(height: 16),
+                                    ActionChip(
+                                      avatar: const Icon(Icons.key, size: 18),
+                                      label: Text('Password: $password',
+                                          overflow: TextOverflow.ellipsis),
+                                      onPressed: () async {
+                                        await Clipboard.setData(
+                                            ClipboardData(text: password));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                                content:
+                                                    Text('Password copied')));
+                                      },
+                                      backgroundColor: kButtonBg,
+                                      labelStyle: const TextStyle(
+                                          color: kGreen,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                            onPressed: () async {
+                                              if (!(formKey.currentState
+                                                      ?.validate() ??
+                                                  false)) return;
+                                              Navigator.pop(ctx);
+                                              try {
+                                                final result = await _postJson(
+                                                    staffAddApi, {
+                                                  'name': nameCtrl.text.trim(),
+                                                  'email':
+                                                      emailCtrl.text.trim(),
+                                                  'password': password,
+                                                  'phone':
+                                                      phoneCtrl.text.trim(),
+                                                  'employee_number':
+                                                      empCtrl.text.trim(),
+                                                });
+                                                if (result['status'] ==
+                                                    'success') {
+                                                  _snack('Staff added');
+                                                  await fetchStaff();
+                                                } else
+                                                  _snack(
+                                                      'Server said: ${result['message']}');
+                                              } catch (e) {
+                                                _snack('Server error: $e');
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                                backgroundColor: kGreen,
+                                                foregroundColor: Colors.white),
+                                            child: const Text('Add Staff'))),
+                                  ]))))));
+        });
+  }
+
+  void _openEditStaffSheet(Map<String, dynamic> staff) {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController(text: '${staff['name'] ?? ''}');
+    final emailCtrl = TextEditingController(text: '${staff['email'] ?? ''}');
+    final phoneCtrl = TextEditingController(text: '${staff['phone'] ?? ''}');
+    final empCtrl =
+        TextEditingController(text: '${staff['employee_number'] ?? ''}');
+    final passCtrl = TextEditingController();
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) {
+          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+          final safeBottom = MediaQuery.of(ctx).padding.bottom;
+          return StatefulBuilder(
+              builder: (ctx, setM) => SafeArea(
+                  top: false,
+                  child: Padding(
+                      padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 20,
+                          bottom: viewInsets + safeBottom + 16),
+                      child: SingleChildScrollView(
+                          child: Form(
+                              key: formKey,
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const _SheetHeader(title: 'Edit Staff'),
+                                    TextFormField(
+                                        controller: nameCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Name'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: emailCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Email'),
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: phoneCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Phone Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: empCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Employee Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: passCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText:
+                                                'New Password (optional)'),
+                                        obscureText: true),
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                            onPressed: () async {
+                                              if (!(formKey.currentState
+                                                      ?.validate() ??
+                                                  false)) return;
+                                              Navigator.pop(ctx);
+                                              // update API not provided here: implement update_staff.php if needed
+                                              _snack(
+                                                  'Save changes not implemented for staff update in this snippet.');
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                                backgroundColor: kGreen,
+                                                foregroundColor: Colors.white),
+                                            child: const Text('Save changes'))),
+                                  ]))))));
+        });
+  }
+
+  Future<void> _deleteStaff(Map<String, dynamic> staff) async {
+    final ok = await _confirmDelete('Delete Staff',
+        'Are you sure you want to delete ${staff['name'] ?? 'this staff'}?');
+    if (!ok) return;
+    try {
+      final payload = <String, String>{
+        'user_id': '${staff['id'] ?? staff['user_id'] ?? ''}'
+      };
+      final res = await http
+          .post(Uri.parse(staffDeleteApi), body: payload)
+          .timeout(const Duration(seconds: 20));
+      final data = jsonDecode(res.body);
+      if (data['status'] == 'success') {
+        _snack('Staff deleted');
+        await fetchStaff();
+      } else
+        _snack('Server said: ${data['message']}');
+    } catch (e) {
+      _snack('Server error: $e');
+    }
+  }
+
+  // ---- Parent add/edit/delete ----
+
+  void _openAddParentSheet() async {
+    // ensure staff loaded
+    if (staffList.isEmpty) {
+      setState(() => _loadingStaff = true);
+      await fetchStaff();
+      if (mounted) setState(() => _loadingStaff = false);
+    }
+    if (staffList.isEmpty) {
+      _snack('Please add a staff first');
+      return;
+    }
+
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final idCtrl = TextEditingController();
+    String password = _generatePassword();
+    String? selectedStaffId; // id string
+
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) {
+          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+          final safeBottom = MediaQuery.of(ctx).padding.bottom;
+          return StatefulBuilder(
+              builder: (ctx, setM) => SafeArea(
+                  top: false,
+                  child: Padding(
+                      padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 20,
+                          bottom: viewInsets + safeBottom + 16),
+                      child: SingleChildScrollView(
+                          child: Form(
+                              key: _parentFormKey,
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const _SheetHeader(title: 'Add Parent'),
+                                    TextFormField(
+                                        controller: nameCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Name'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: emailCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Email'),
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: phoneCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Phone Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: idCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText:
+                                                'ID Number (min 5 digits)'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) => (v == null ||
+                                                v.trim().isEmpty ||
+                                                v.trim().length < 5)
+                                            ? 'Required (min 5 digits)'
+                                            : null),
+                                    const SizedBox(height: 12),
+
+                                    // Dropdown: assign staff (REQUIRED)
+                                    DropdownButtonFormField<String>(
+                                      value: selectedStaffId,
+                                      isExpanded: true,
+                                      items: staffList
+                                          .map<DropdownMenuItem<String>>((s) {
+                                        final display =
+                                            '${s['name'] ?? s['email'] ?? ''}';
+                                        return DropdownMenuItem(
+                                            value: '${s['id']}',
+                                            child: Text(display,
+                                                overflow:
+                                                    TextOverflow.ellipsis));
+                                      }).toList(),
+                                      onChanged: (v) =>
+                                          setM(() => selectedStaffId = v),
+                                      decoration: const InputDecoration(
+                                          labelText: 'Assign Staff (required)'),
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Please select a staff'
+                                          : null,
+                                    ),
+
+                                    const SizedBox(height: 16),
+                                    ActionChip(
+                                        avatar: const Icon(Icons.key, size: 18),
+                                        label: Text('Password: $password',
+                                            overflow: TextOverflow.ellipsis),
+                                        onPressed: () async {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: password));
+                                          _snack('Password copied');
+                                        },
+                                        backgroundColor: kButtonBg,
+                                        labelStyle: const TextStyle(
+                                            color: kGreen,
+                                            fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 16),
+
+                                    SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                            onPressed: () async {
+                                              if (!(_parentFormKey.currentState
+                                                      ?.validate() ??
+                                                  false)) return;
+                                              Navigator.pop(ctx);
+                                              try {
+                                                final result = await _postJson(
+                                                    parentAddApi, {
+                                                  'name': nameCtrl.text.trim(),
+                                                  'email':
+                                                      emailCtrl.text.trim(),
+                                                  'password': password,
+                                                  'phone':
+                                                      phoneCtrl.text.trim(),
+                                                  'identity_number':
+                                                      idCtrl.text.trim(),
+                                                  'assigned_staff_user_id':
+                                                      selectedStaffId ?? '',
+                                                });
+                                                if (result['status'] ==
+                                                    'success') {
+                                                  _snack('Parent added');
+                                                  await Future.wait([
+                                                    fetchParents(),
+                                                    fetchChildren()
+                                                  ]);
+                                                } else
+                                                  _snack(
+                                                      'Server said: ${result['message']}');
+                                              } catch (e) {
+                                                _snack('Server error: $e');
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                                backgroundColor: kGreen,
+                                                foregroundColor: Colors.white),
+                                            child: const Text('Add Parent'))),
+                                  ]))))));
+        });
+  }
+
+  void _openEditParentSheet(Map<String, dynamic> parent) {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController(text: '${parent['name'] ?? ''}');
+    final emailCtrl = TextEditingController(text: '${parent['email'] ?? ''}');
+    final phoneCtrl = TextEditingController(text: '${parent['phone'] ?? ''}');
+    final idCtrl =
+        TextEditingController(text: '${parent['identity_number'] ?? ''}');
+    final passCtrl = TextEditingController();
+
+    String? selectedStaffId = parent['assigned_staff_user_id']?.toString();
+    // if selected id not in staffList, null it
+    if (selectedStaffId != null &&
+        !staffList.any((s) => '${s['id']}' == selectedStaffId))
+      selectedStaffId = null;
+
+    if (staffList.isEmpty) {
+      _snack('No staff available. Fetching...');
+      fetchStaff();
+    }
+
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) {
+          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+          final safeBottom = MediaQuery.of(ctx).padding.bottom;
+          return StatefulBuilder(
+              builder: (ctx, setM) => SafeArea(
+                  top: false,
+                  child: Padding(
+                      padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 20,
+                          bottom: viewInsets + safeBottom + 16),
+                      child: SingleChildScrollView(
+                          child: Form(
+                              key: formKey,
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const _SheetHeader(title: 'Edit Parent'),
+                                    TextFormField(
+                                        controller: nameCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Name'),
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: emailCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Email'),
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: phoneCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'Phone Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: idCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText: 'ID Number'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                                ? 'Required'
+                                                : null),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      value: selectedStaffId,
+                                      isExpanded: true,
+                                      items: staffList
+                                          .map((s) => DropdownMenuItem(
+                                              value: '${s['id']}',
+                                              child: Text(
+                                                  '${s['name'] ?? s['email'] ?? ''}',
+                                                  overflow:
+                                                      TextOverflow.ellipsis)))
+                                          .toList(),
+                                      onChanged: (v) =>
+                                          setM(() => selectedStaffId = v),
+                                      decoration: const InputDecoration(
+                                          labelText: 'Assign Staff (required)'),
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Please select a staff'
+                                          : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextFormField(
+                                        controller: passCtrl,
+                                        decoration: const InputDecoration(
+                                            labelText:
+                                                'New Password (optional)'),
+                                        obscureText: true),
+                                    const SizedBox(height: 16),
+                                    SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                            onPressed: () async {
+                                              if (!(formKey.currentState
+                                                      ?.validate() ??
+                                                  false)) return;
+                                              Navigator.pop(ctx);
+                                              try {
+                                                final payload =
+                                                    <String, String>{
+                                                  'user_id':
+                                                      '${parent['id'] ?? parent['user_id'] ?? ''}',
+                                                  'name': nameCtrl.text.trim(),
+                                                  'new_email':
+                                                      emailCtrl.text.trim(),
+                                                  'phone':
+                                                      phoneCtrl.text.trim(),
+                                                  'identity_number':
+                                                      idCtrl.text.trim(),
+                                                  'assigned_staff_user_id':
+                                                      selectedStaffId ?? '',
+                                                };
+                                                if (passCtrl.text
+                                                    .trim()
+                                                    .isNotEmpty)
+                                                  payload['password'] =
+                                                      passCtrl.text.trim();
+                                                final result = await _postJson(
+                                                    parentUpdateApi, payload);
+                                                if (result['status'] ==
+                                                    'success') {
+                                                  _snack('Parent updated');
+                                                  await Future.wait([
+                                                    fetchParents(),
+                                                    fetchChildren()
+                                                  ]);
+                                                } else
+                                                  _snack(
+                                                      'Server said: ${result['message']}');
+                                              } catch (e) {
+                                                _snack('Server error: $e');
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                                backgroundColor: kGreen,
+                                                foregroundColor: Colors.white),
+                                            child: const Text('Save changes'))),
+                                  ]))))));
+        });
+  }
+
+  Future<void> _deleteParent(Map<String, dynamic> parent) async {
+    final ok = await _confirmDelete('Delete Parent',
+        'Are you sure you want to delete ${parent['name'] ?? 'this parent'}?');
+    if (!ok) return;
+    try {
+      final res = await http.post(Uri.parse(parentDeleteApi), body: {
+        'user_id': '${parent['id'] ?? parent['user_id'] ?? ''}'
+      }).timeout(const Duration(seconds: 20));
+      final data = jsonDecode(res.body);
+      if (data['status'] == 'success') {
+        _snack('Parent deleted');
+        await Future.wait([fetchParents(), fetchChildren()]);
+      } else
+        _snack('Server said: ${data['message']}');
+    } catch (e) {
+      _snack('Server error: $e');
+    }
+  }
+
+  // ---- Children add/delete ----
+  void _openAddChildSheet() {
+    if (parentList.isEmpty) {
+      _snack('Add a parent first.');
+      return;
+    }
+
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController();
+    final classCtrl = TextEditingController();
+    String? selectedParentId;
 
     showModalBottomSheet(
       context: context,
@@ -462,52 +1202,81 @@ class _AdminDashboardState extends State<AdminDashboard>
       useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
-        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final safeBottom = MediaQuery.of(ctx).padding.bottom;
-
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 20,
-                bottom: viewInsets + safeBottom + 16),
-            child: SingleChildScrollView(
+        final bottom = MediaQuery.of(ctx).viewInsets.bottom + 16;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 20, 16, bottom),
+          child: StatefulBuilder(
+            builder: (ctx, setM) => Form(
+              key: formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const _SheetTitle('Edit Profile'),
-                  TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Name')),
+                  const _SheetTitle('Add Child'),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: emailCtrl,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
+                  DropdownButtonFormField<String>(
+                    value: selectedParentId,
+                    items: parentList.map((p) {
+                      return DropdownMenuItem(
+                        value: '${p['id']}',
+                        child: Text('${p['name'] ?? '-'}',
+                            overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setM(() => selectedParentId = v),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Select a parent' : null,
+                    decoration:
+                        const InputDecoration(labelText: 'Parent (required)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Child Name'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: classCtrl,
+                    decoration: const InputDecoration(labelText: 'Class'),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
+                    height: 46,
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          if (nameCtrl.text.trim().isNotEmpty) {
-                            adminName = nameCtrl.text.trim();
-                          }
-                          if (emailCtrl.text.trim().isNotEmpty) {
-                            adminEmail = emailCtrl.text.trim();
-                          }
-                        });
-                        Navigator.pop(ctx);
-                        _snack('Profile updated');
-                      },
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: kGreen, foregroundColor: Colors.white),
-                      child: const Text('Save'),
+                        backgroundColor: kGreen,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        if (!(formKey.currentState?.validate() ?? false))
+                          return;
+                        Navigator.pop(ctx);
+
+                        try {
+                          final res = await _postJson(
+                            childAddApi,
+                            {
+                              'parent_id': selectedParentId!, // required
+                              'name': nameCtrl.text.trim(), // required
+                              'class': classCtrl.text.trim(), // optional
+                            },
+                          );
+                          if (res['status'] == 'success') {
+                            _snack('Child added');
+                            await fetchChildren();
+                          } else {
+                            _snack('Server said: ${res['message']}');
+                          }
+                        } catch (e) {
+                          _snack('Server error: $e');
+                        }
+                      },
+                      child: const Text('Add Child'),
                     ),
                   ),
                 ],
@@ -519,412 +1288,20 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  void _openAddStaffSheet() {
-    final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final empCtrl = TextEditingController();
-    String password = _generatePassword();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final safeBottom = MediaQuery.of(ctx).padding.bottom;
-
-        return StatefulBuilder(
-          builder: (ctx, setM) => SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: viewInsets + safeBottom + 16),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const _SheetHeader(title: 'Add Staff'),
-                      TextFormField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Name required';
-                          }
-                          if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
-                            return 'Only letters allowed';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: emailCtrl,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Email required';
-                          }
-                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v)) {
-                            return 'Invalid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: phoneCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Phone Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Phone required';
-                          }
-                          if (!RegExp(r'^\d{10}$').hasMatch(v)) {
-                            return 'Phone must be 10 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: empCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Employee Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Employee Number required';
-                          }
-                          if (!RegExp(r'^\d{5}$').hasMatch(v)) {
-                            return 'Must be 5 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _CopyablePasswordChip(password: password),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (!(formKey.currentState?.validate() ?? false)) {
-                              return;
-                            }
-                            final key = nameCtrl.text.trim();
-                            final payload = {
-                              'name': key,
-                              'email': emailCtrl.text.trim(),
-                              'password': password,
-                              'phone': phoneCtrl.text.trim(),
-                              'employee_number': empCtrl.text.trim(),
-                            };
-
-                            // أضف محليًا فورًا
-                            if (mounted) {
-                              setState(() {
-                                staffData[key] = {
-                                  'email': payload['email'],
-                                  'phone': payload['phone'],
-                                  'empNumber': payload['employee_number'],
-                                  'password': password,
-                                  'parents': <String>[],
-                                  'synced': false,
-                                  // سيُملأ user_id لاحقًا إذا توفر من السيرفر
-                                };
-                              });
-                            }
-                            if (mounted) Navigator.pop(ctx);
-
-                            // شبكة
-                            try {
-                              final result =
-                                  await _postJson(staffAddApi, payload);
-                              final ok = result['status'] == 'success';
-                              final userId = result['user_id'];
-                              if (mounted && staffData.containsKey(key)) {
-                                setState(() {
-                                  staffData[key]!['synced'] = ok;
-                                  if (userId != null) {
-                                    staffData[key]!['user_id'] = userId;
-                                  }
-                                });
-                              }
-                              _snack(ok
-                                  ? 'Staff added (synced)'
-                                  : 'Added locally but server said: ${result['message']}');
-                            } catch (e) {
-                              _snack(
-                                  'Added locally (offline). Server error: $e');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Add Staff'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _openEditStaffSheet(String originalKey) async {
-    final data = staffData[originalKey]!;
-    final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController(text: originalKey);
-    final emailCtrl = TextEditingController(text: '${data['email'] ?? ''}');
-    final phoneCtrl = TextEditingController(text: '${data['phone'] ?? ''}');
-    final empCtrl = TextEditingController(text: '${data['empNumber'] ?? ''}');
-    final passCtrl = TextEditingController(); // فارغ = لا تغيير
-
-    // تأكد من user_id (إن لم يكن موجود)
-    int? userId = data['user_id'] is int ? data['user_id'] as int : null;
-    userId ??= await _ensureUserIdByEmail(emailCtrl.text.trim());
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final safeBottom = MediaQuery.of(ctx).padding.bottom;
-
-        return StatefulBuilder(
-          builder: (ctx, setM) => SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: viewInsets + safeBottom + 16),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const _SheetHeader(title: 'Edit Staff'),
-                      TextFormField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Name required';
-                          }
-                          if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
-                            return 'Only letters allowed';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: emailCtrl,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Email required';
-                          }
-                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v)) {
-                            return 'Invalid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: phoneCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Phone Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Phone required';
-                          }
-                          if (!RegExp(r'^\d{10}$').hasMatch(v)) {
-                            return 'Phone must be 10 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: empCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Employee Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Employee Number required';
-                          }
-                          if (!RegExp(r'^\d{5}$').hasMatch(v)) {
-                            return 'Must be 5 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: passCtrl,
-                        decoration: const InputDecoration(
-                            labelText: 'New Password (optional)'),
-                        obscureText: true,
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (!(formKey.currentState?.validate() ?? false)) {
-                              return;
-                            }
-                            final newKey = nameCtrl.text.trim();
-
-                            final payload = <String, String>{
-                              if (userId != null)
-                                'user_id': '$userId'
-                              else
-                                'email': emailCtrl.text.trim(),
-                              'name': newKey,
-                              'new_email': emailCtrl.text.trim(),
-                              'phone': phoneCtrl.text.trim(),
-                              'employee_number': empCtrl.text.trim(),
-                            };
-                            if (passCtrl.text.trim().isNotEmpty) {
-                              payload['password'] = passCtrl.text.trim();
-                            }
-
-                            // محليًا
-                            setState(() {
-                              // لو تغير الاسم (المفتاح)
-                              if (newKey != originalKey) {
-                                staffData[newKey] = Map<String, dynamic>.from(
-                                    staffData[originalKey]!);
-                                staffData.remove(originalKey);
-                              }
-                              staffData[newKey]!.addAll({
-                                'email': payload['new_email'],
-                                'phone': payload['phone'],
-                                'empNumber': payload['employee_number'],
-                                'synced': false,
-                              });
-                              if (userId != null) {
-                                staffData[newKey]!['user_id'] = userId;
-                              }
-                            });
-
-                            if (mounted) Navigator.pop(ctx);
-
-                            try {
-                              final result =
-                                  await _postJson(staffUpdateApi, payload);
-                              final ok = result['status'] == 'success';
-                              if (mounted && staffData.containsKey(newKey)) {
-                                setState(
-                                    () => staffData[newKey]!['synced'] = ok);
-                              }
-                              _snack(ok
-                                  ? 'Staff updated (synced)'
-                                  : 'Updated locally but server said: ${result['message']}');
-                            } catch (e) {
-                              _snack(
-                                  'Updated locally (offline). Server error: $e');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Save changes'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _deleteStaff(String key) async {
-    final data = staffData[key]!;
-    final email = data['email']?.toString() ?? '';
-    int? userId = data['user_id'] is int ? data['user_id'] as int : null;
-    userId ??= await _ensureUserIdByEmail(email);
-
-    final confirmed = await _confirmDelete(
-        'Delete Staff', 'Are you sure you want to delete $key?');
-    if (!confirmed) return;
-
-    // احفظ نسخة محلية للتراجع لو فشل السيرفر
-    final backup = Map<String, dynamic>.from(data);
-
-    // احذف محليًا
-    setState(() {
-      staffData.remove(key);
-      // أزل ربطه بأولياء الأمور (لو كنت تستخدم هذا الربط في الواجهة فقط)
-      for (final p in parentData.values) {
-        if (p['staff'] == key) p['staff'] = null;
-      }
-    });
-
-    // شبكة
-    try {
-      final payload = <String, String>{
-        if (userId != null) 'user_id': '$userId' else 'email': email,
-      };
-      final result = await _postJson(staffDeleteApi, payload);
-      final ok = result['status'] == 'success';
-      if (!ok) {
-        // أعد الإدراج محليًا
-        setState(() => staffData[key] = backup);
-        _snack('Server refused delete: ${result['message']}');
-      } else {
-        _snack('Staff deleted');
-      }
-    } catch (e) {
-      // أعد الإدراج محليًا
-      setState(() => staffData[key] = backup);
-      _snack('Delete failed: $e');
+  void _openEditChildSheet(Map<String, dynamic> child) async {
+    if (parentList.isEmpty) {
+      await fetchParents();
     }
-  }
 
-  void _openAddParentSheet() {
     final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final idCtrl = TextEditingController();
-    String? selectedStaff; // بالاسم المعروض
-    final List<Map<String, String>> children = [];
-    String password = _generatePassword();
+    final nameCtrl =
+        TextEditingController(text: (child['child_name'] ?? '').toString());
+    final classCtrl =
+        TextEditingController(text: (child['class'] ?? '').toString());
+    String? selectedParentId =
+        (child['parent_user_id'] ?? '').toString().isEmpty
+            ? null
+            : (child['parent_user_id']).toString();
 
     showModalBottomSheet(
       context: context,
@@ -932,252 +1309,84 @@ class _AdminDashboardState extends State<AdminDashboard>
       useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
-        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final safeBottom = MediaQuery.of(ctx).padding.bottom;
-
-        return StatefulBuilder(
-          builder: (ctx, setM) => SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: viewInsets + safeBottom + 16),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const _SheetHeader(title: 'Add Parent'),
-                      TextFormField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Name required';
-                          }
-                          if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
-                            return 'Only letters allowed';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: emailCtrl,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Email required';
-                          }
-                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v)) {
-                            return 'Invalid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: phoneCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Phone Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Phone required';
-                          }
-                          if (!RegExp(r'^\d{10}$').hasMatch(v)) {
-                            return 'Phone must be 10 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: idCtrl,
-                        decoration: const InputDecoration(labelText: 'ID Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'ID required';
-                          }
-                          if (!RegExp(r'^\d{10,12}$').hasMatch(v)) {
-                            return 'Invalid ID';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                      value: selectedStaff, 
-                     items: staffData.keys
-      .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
-      .toList(),
-  onChanged: (val) => setM(() => selectedStaff = val),
-  decoration: const InputDecoration(labelText: 'Assign Staff (optional)'),
-),
-
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              final childName = TextEditingController();
-                              final childClass = TextEditingController();
-                              showDialog(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('Add Child'),
-                                  content: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      TextField(
-                                          controller: childName,
-                                          decoration: const InputDecoration(
-                                              labelText: 'Child Name')),
-                                      TextField(
-                                          controller: childClass,
-                                          decoration: const InputDecoration(
-                                              labelText: 'Class')),
-                                    ],
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('Cancel')),
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        if (childName.text.trim().isEmpty) {
-                                          return;
-                                        }
-                                        children.add({
-                                          'name': childName.text.trim(),
-                                          'class': childClass.text.trim()
-                                        });
-                                        Navigator.pop(context);
-                                        _snack('Child added');
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                          backgroundColor: kGreen,
-                                          foregroundColor: Colors.white),
-                                      child: const Text('Add'),
-                                    ),
-                                  ],
-                                ),
-                              );
+        final inset = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 20, 16, inset + 16),
+          child: StatefulBuilder(
+            builder: (ctx, setM) => Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const _SheetTitle('Edit Child'),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedParentId,
+                    isExpanded: true,
+                    items: parentList.map((p) {
+                      return DropdownMenuItem(
+                        value: '${p['id']}',
+                        child: Text('${p['name'] ?? '-'}',
+                            overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setM(() => selectedParentId = v),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Select a parent' : null,
+                    decoration: const InputDecoration(labelText: 'Parent'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Child Name'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: classCtrl,
+                    decoration: const InputDecoration(labelText: 'Class'),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (!(formKey.currentState?.validate() ?? false)) {
+                          return;
+                        }
+                        Navigator.pop(ctx);
+                        try {
+                          final data = await _postJson(
+                            '$baseUrl/update_child.php',
+                            {
+                              'child_id': '${child['id']}',
+                              'parent_id': selectedParentId!,
+                              'name': nameCtrl.text.trim(),
+                              'class': classCtrl.text.trim(),
                             },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Child'),
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: kButtonBg,
-                                foregroundColor: kGreen),
-                          ),
-                          const SizedBox(width: 8),
-                          if (children.isNotEmpty)
-                            Expanded(
-                              child: Wrap(
-                                spacing: 6,
-                                children: children
-                                    .map((c) => Chip(
-                                          label: Text(c['name'] ?? '-',
-                                              overflow:
-                                                  TextOverflow.ellipsis),
-                                          avatar:
-                                              const Icon(Icons.school, size: 16),
-                                        ))
-                                    .toList(),
-                              ),
-                            ),
-                        ],
+                          );
+                          if (data['status'] == 'success') {
+                            _snack('Child updated');
+                            await fetchChildren();
+                          } else {
+                            _snack('Server: ${data['message']}');
+                          }
+                        } catch (e) {
+                          _snack('Server error: $e');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kGreen,
+                        foregroundColor: Colors.white,
                       ),
-                      const SizedBox(height: 16),
-                      _CopyablePasswordChip(password: password),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (!(formKey.currentState?.validate() ?? false)) {
-                              return;
-                            }
-                            final key = nameCtrl.text.trim();
-                            final staffEmail =
-                                (selectedStaff != null &&
-                                        staffData.containsKey(selectedStaff))
-                                    ? (staffData[selectedStaff]!['email']
-                                        as String)
-                                    : '';
-
-                            final payload = {
-                              'name': key,
-                              'email': emailCtrl.text.trim(),
-                              'password': password,
-                              'phone': phoneCtrl.text.trim(),
-                              'identity_number': idCtrl.text.trim(),
-                              'assigned_staff_email': staffEmail,
-                              'children': jsonEncode(children),
-                            };
-
-                            // محليًا
-                            if (mounted) {
-                              setState(() {
-                                parentData[key] = {
-                                  'email': payload['email'],
-                                  'phone': payload['phone'],
-                                  'id': payload['identity_number'],
-                                  'password': password,
-                                  'children':
-                                      List<Map<String, String>>.from(children),
-                                  'staff': selectedStaff,
-                                  'synced': false,
-                                };
-                                if (selectedStaff != null &&
-                                    staffData.containsKey(selectedStaff)) {
-                                  (staffData[selectedStaff]!['parents']
-                                              as List<String>? ??
-                                          <String>[])
-                                      .add(key);
-                                }
-                              });
-                            }
-                            if (mounted) Navigator.pop(ctx);
-
-                            // شبكة
-                            try {
-                              final result =
-                                  await _postJson(parentAddApi, payload);
-                              final ok = result['status'] == 'success';
-                              final userId = result['user_id'];
-                              if (mounted && parentData.containsKey(key)) {
-                                setState(() {
-                                  parentData[key]!['synced'] = ok;
-                                  if (userId != null) {
-                                    parentData[key]!['user_id'] = userId;
-                                  }
-                                });
-                              }
-                              _snack(ok
-                                  ? 'Parent added (synced)'
-                                  : 'Added locally but server said: ${result['message']}');
-                            } catch (e) {
-                              _snack(
-                                  'Added locally (offline). Server error: $e');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Add Parent'),
-                        ),
-                      ),
-                    ],
+                      child: const Text('Save changes'),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -1186,359 +1395,35 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  void _openEditParentSheet(String originalKey) async {
-    final data = parentData[originalKey]!;
-    final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController(text: originalKey);
-    final emailCtrl = TextEditingController(text: '${data['email'] ?? ''}');
-    final phoneCtrl = TextEditingController(text: '${data['phone'] ?? ''}');
-    final idCtrl = TextEditingController(text: '${data['id'] ?? ''}');
-    String? selectedStaff = data['staff']?.toString();
-    final List<Map<String, String>> children =
-        List<Map<String, String>>.from(
-      (data['children'] as List?)
-              ?.map((e) => Map<String, String>.from(e as Map)) ??
-          const [],
-    );
-    final passCtrl = TextEditingController(); // فارغ = لا تغيير
+  Future<void> _deleteChild(Map<String, dynamic> child) async {
+    final ok = await _confirmDelete('Delete Child',
+        'Are you sure you want to delete ${child['child_name'] ?? child['name'] ?? 'this child'}?');
+    if (!ok) return;
 
-    // تأكد من user_id (إن لم يكن موجود)
-    int? userId = data['user_id'] is int ? data['user_id'] as int : null;
-    userId ??= await _ensureUserIdByEmail(emailCtrl.text.trim());
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final safeBottom = MediaQuery.of(ctx).padding.bottom;
-
-        return StatefulBuilder(
-          builder: (ctx, setM) => SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: viewInsets + safeBottom + 16),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const _SheetHeader(title: 'Edit Parent'),
-                      TextFormField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Name required';
-                          }
-                          if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
-                            return 'Only letters allowed';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: emailCtrl,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Email required';
-                          }
-                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v)) {
-                            return 'Invalid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: phoneCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Phone Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Phone required';
-                          }
-                          if (!RegExp(r'^\d{10}$').hasMatch(v)) {
-                            return 'Phone must be 10 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: idCtrl,
-                        decoration: const InputDecoration(labelText: 'ID Number'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'ID required';
-                          }
-                          if (!RegExp(r'^\d{10,12}$').hasMatch(v)) {
-                            return 'Invalid ID';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedStaff,
-                        items: staffData.keys
-                            .map((s) => DropdownMenuItem(
-                                value: s,
-                                child:
-                                    Text(s, overflow: TextOverflow.ellipsis)))
-                            .toList(),
-                        onChanged: (val) => setM(() => selectedStaff = val),
-                        decoration: const InputDecoration(
-                            labelText: 'Assign Staff (optional)'),
-                      ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: -4,
-                          children: [
-                            ...children.asMap().entries.map((entry) {
-                              final idx = entry.key;
-                              final c = entry.value;
-                              return Chip(
-                                avatar: const Icon(Icons.school, size: 16),
-                                label: Text(c['name'] ?? '-',
-                                    overflow: TextOverflow.ellipsis),
-                                onDeleted: () {
-                                  setM(() => children.removeAt(idx));
-                                },
-                              );
-                            }),
-                            ActionChip(
-                              avatar: const Icon(Icons.add, size: 18),
-                              label: const Text('Add Child'),
-                              onPressed: () {
-                                final childName = TextEditingController();
-                                final childClass = TextEditingController();
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('Add Child'),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        TextField(
-                                            controller: childName,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Child Name')),
-                                        TextField(
-                                            controller: childClass,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Class')),
-                                      ],
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          child: const Text('Cancel')),
-                                      ElevatedButton(
-                                        onPressed: () {
-                                          if (childName.text.trim().isEmpty) {
-                                            return;
-                                          }
-                                          setM(() => children.add({
-                                                'name': childName.text.trim(),
-                                                'class':
-                                                    childClass.text.trim()
-                                              }));
-                                          Navigator.pop(context);
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: kGreen,
-                                            foregroundColor: Colors.white),
-                                        child: const Text('Add'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: passCtrl,
-                        decoration: const InputDecoration(
-                            labelText: 'New Password (optional)'),
-                        obscureText: true,
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (!(formKey.currentState?.validate() ?? false)) {
-                              return;
-                            }
-                            final newKey = nameCtrl.text.trim();
-                            final oldStaff = data['staff']?.toString();
-                            final staffEmail =
-                                (selectedStaff != null &&
-                                        staffData.containsKey(selectedStaff))
-                                    ? (staffData[selectedStaff]!['email']
-                                        as String)
-                                    : '';
-
-                            final payload = <String, String>{
-                              if (userId != null)
-                                'user_id': '$userId'
-                              else
-                                'email': emailCtrl.text.trim(),
-                              'name': newKey,
-                              'new_email': emailCtrl.text.trim(),
-                              'phone': phoneCtrl.text.trim(),
-                              'identity_number': idCtrl.text.trim(),
-                              'assigned_staff_email': staffEmail,
-                              'children': jsonEncode(children),
-                            };
-                            if (passCtrl.text.trim().isNotEmpty) {
-                              payload['password'] = passCtrl.text.trim();
-                            }
-
-                            // محليًا
-                            setState(() {
-                              if (newKey != originalKey) {
-                                parentData[newKey] = Map<String, dynamic>.from(
-                                    parentData[originalKey]!);
-                                parentData.remove(originalKey);
-                              }
-                              parentData[newKey]!.addAll({
-                                'email': payload['new_email'],
-                                'phone': payload['phone'],
-                                'id': payload['identity_number'],
-                                'children':
-                                    List<Map<String, String>>.from(children),
-                                'staff': selectedStaff,
-                                'synced': false,
-                              });
-                              if (userId != null) {
-                                parentData[newKey]!['user_id'] = userId;
-                              }
-
-                              // حدّث الربط في staffData لو تغيّر الموظف المعيّن
-                              if (oldStaff != selectedStaff) {
-                                if (oldStaff != null &&
-                                    staffData.containsKey(oldStaff)) {
-                                  (staffData[oldStaff]!['parents']
-                                          as List<String>?)
-                                      ?.remove(newKey);
-                                }
-                                if (selectedStaff != null &&
-                                    staffData.containsKey(selectedStaff)) {
-                                  (staffData[selectedStaff]!['parents']
-                                              as List<String>? ??
-                                          <String>[])
-                                      .add(newKey);
-                                }
-                              }
-                            });
-
-                            if (mounted) Navigator.pop(ctx);
-
-                            try {
-                              final result =
-                                  await _postJson(parentUpdateApi, payload);
-                              final ok = result['status'] == 'success';
-                              if (mounted && parentData.containsKey(newKey)) {
-                                setState(
-                                    () => parentData[newKey]!['synced'] = ok);
-                              }
-                              _snack(ok
-                                  ? 'Parent updated (synced)'
-                                  : 'Updated locally but server said: ${result['message']}');
-                            } catch (e) {
-                              _snack(
-                                  'Updated locally (offline). Server error: $e');
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Save changes'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _deleteParent(String key) async {
-    final data = parentData[key]!;
-    final email = data['email']?.toString() ?? '';
-    int? userId = data['user_id'] is int ? data['user_id'] as int : null;
-    userId ??= await _ensureUserIdByEmail(email);
-
-    final confirmed = await _confirmDelete(
-        'Delete Parent', 'Are you sure you want to delete $key?');
-    if (!confirmed) return;
-
-    final backup = Map<String, dynamic>.from(data);
-    final oldStaff = data['staff']?.toString();
-
-    // احذف محليًا
-    setState(() {
-      parentData.remove(key);
-      if (oldStaff != null && staffData.containsKey(oldStaff)) {
-        (staffData[oldStaff]!['parents'] as List<String>?)?.remove(key);
-      }
-    });
-
-    // شبكة
     try {
-      final payload = <String, String>{
-        if (userId != null) 'user_id': '$userId' else 'email': email,
-      };
-      final result = await _postJson(parentDeleteApi, payload);
-      final ok = result['status'] == 'success';
-      if (!ok) {
-        setState(() => parentData[key] = backup);
-        if (oldStaff != null && staffData.containsKey(oldStaff)) {
-          (staffData[oldStaff]!['parents'] as List<String>? ?? <String>[])
-              .add(key);
-        }
-        _snack('Server refused delete: ${result['message']}');
+      final res = await _postJson(childDeleteApi, {
+        'child_id': '${child['id']}',
+      });
+      if (res['status'] == 'success') {
+        _snack('Child deleted');
+        await fetchChildren();
       } else {
-        _snack('Parent deleted');
+        _snack('Server said: ${res['message']}');
       }
     } catch (e) {
-      setState(() => parentData[key] = backup);
-      if (oldStaff != null && staffData.containsKey(oldStaff)) {
-        (staffData[oldStaff]!['parents'] as List<String>? ?? <String>[])
-            .add(key);
-      }
-      _snack('Delete failed: $e');
+      _snack('Server error: $e');
     }
   }
 
-  // ===== Utils =====
+  // ===== utils =====
+  String _generatePassword([int length = 8]) {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = Random.secure();
+    return String.fromCharCodes(Iterable.generate(
+        length, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+  }
+
   String _initials(String name) {
     final parts =
         name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
@@ -1549,53 +1434,83 @@ class _AdminDashboardState extends State<AdminDashboard>
     }
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
+
+  Future<bool> _confirmDelete(String title, String message) async {
+    return await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+                    title: Text(title),
+                    content: Text(message),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: kGreen,
+                              foregroundColor: Colors.white),
+                          child: const Text('Delete')),
+                    ])) ??
+        false;
+  }
+
+  Future<void> _confirmLogout() async {
+    final ok = await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+                    title: const Text('Log out'),
+                    content: const Text('Are you sure you want to log out?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: kGreen,
+                              foregroundColor: Colors.white),
+                          child: const Text('Log out')),
+                    ])) ??
+        false;
+    if (ok && mounted) Navigator.pop(context);
+  }
 }
 
-// ======== Small widgets ========
-
+// small widgets
 class _Avatar extends StatelessWidget {
   final String initials;
   final bool big;
-
   const _Avatar({required this.initials, this.big = false});
-
   @override
   Widget build(BuildContext context) {
     return CircleAvatar(
-      radius: big ? 24 : 18,
-      backgroundColor: _AdminDashboardState.kPanelLight,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          initials,
-          maxLines: 1,
-          overflow: TextOverflow.clip,
-          style: TextStyle(
-            color: _AdminDashboardState.kGreen,
-            fontWeight: FontWeight.w700,
-            fontSize: big ? 16 : 12,
-            height: 1.0,
-          ),
-        ),
-      ),
-    );
+        radius: big ? 24 : 18,
+        backgroundColor: _AdminDashboardState.kPanelLight,
+        child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(initials,
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                    color: _AdminDashboardState.kGreen,
+                    fontWeight: FontWeight.w700,
+                    fontSize: big ? 16 : 12,
+                    height: 1.0))));
   }
 }
 
 class _GlassCard extends StatelessWidget {
   final Widget child;
   const _GlassCard({required this.child});
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: _AdminDashboardState.kPanelLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: child,
-    );
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+            color: _AdminDashboardState.kPanelLight,
+            borderRadius: BorderRadius.circular(12)),
+        child: child);
   }
 }
 
@@ -1603,104 +1518,40 @@ class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-
   const _EmptyState(
       {required this.icon, required this.title, required this.subtitle});
-
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 42, color: _AdminDashboardState.kGreen),
-        const SizedBox(height: 8),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Text(subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black54)),
-      ]),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        fontWeight: FontWeight.w800,
-        fontSize: 18,
-        color: Colors.black87,
-      ),
-    );
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(icon, size: 42, color: _AdminDashboardState.kGreen),
+      const SizedBox(height: 8),
+      Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 4),
+      Text(subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.black54)),
+    ]));
   }
 }
 
 class _SheetTitle extends StatelessWidget {
   final String text;
   const _SheetTitle(this.text);
-
   @override
-  Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18));
-  }
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18));
 }
 
 class _SheetHeader extends StatelessWidget {
   final String title;
   final Widget? trailing;
-    const _SheetHeader({required this.title, this.trailing}); 
-
+  const _SheetHeader({required this.title, this.trailing});
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _SheetTitle(title)),
-        if (trailing != null) trailing!,
-      ],
-    );
-  }
-}
-
-class _CopyablePasswordChip extends StatelessWidget {
-  final String password;
-  const _CopyablePasswordChip({required this.password});
-
-  @override
-  Widget build(BuildContext context) {
-    return ActionChip(
-      avatar: const Icon(Icons.key, size: 18),
-      label:
-          Text('Password: $password', overflow: TextOverflow.ellipsis),
-      onPressed: () async {
-        await Clipboard.setData(ClipboardData(text: password));
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Password copied')));
-      },
-      backgroundColor: _AdminDashboardState.kButtonBg,
-      labelStyle: const TextStyle(
-          color: _AdminDashboardState.kGreen, fontWeight: FontWeight.w600),
-    );
-  }
-}
-
-class _SyncIcon extends StatelessWidget {
-  final bool synced;
-  const _SyncIcon({required this.synced});
-
-  @override
-  Widget build(BuildContext context) {
-    return Icon(
-      synced ? Icons.cloud_done : Icons.cloud_off,
-      size: 18,
-      color: synced ? Colors.green : Colors.orange,
-    );
+    return Row(children: [
+      Expanded(child: _SheetTitle(title)),
+      if (trailing != null) trailing!
+    ]);
   }
 }

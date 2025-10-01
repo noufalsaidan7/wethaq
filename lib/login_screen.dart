@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'staff_dashboard.dart';
 
 import 'reset_password_screen.dart';
 import 'admin_dashboard.dart';
@@ -13,10 +14,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-const String baseUrl = String.fromEnvironment(
-  'API_BASE',
-  defaultValue: 'http://192.168.1.13/wethaq',
-);
+const String baseUrl = 'http://192.168.1.28/wethaq';
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
@@ -26,13 +24,13 @@ class _LoginScreenState extends State<LoginScreen>
   bool isLoading = false;
   bool _obscurePassword = true;
 
-  // ط£ظ„ظˆط§ظ†
+  // الألوان
   static const Color kPanelGreen = Color(0xFF5E8B62);
   static const Color kFieldFill = Color(0xFFA3B8A6);
   static const Color kBtnFill = Color(0xFFE4EFE7);
   static const Color kForgot = Color(0xFFCC8F93);
 
-  // ط£ظ†ظٹظ…ظٹط´ظ† ط§ظ„ط¨ط§ظ†ظ„
+  // أنيميشن البانل
   late final AnimationController _panelCtrl;
   late final Animation<Offset> _slideUp;
   late final Animation<double> _fadeIn;
@@ -42,10 +40,10 @@ class _LoginScreenState extends State<LoginScreen>
     super.initState();
     _panelCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200), // ط§ط¨ط·ط£ ط´ظˆظٹ
+      duration: const Duration(milliseconds: 1200),
     );
     _slideUp = Tween<Offset>(
-      begin: const Offset(0, 0.20), // ظٹط¨ط¯ط£ طھط­طھ ط´ظˆظٹ
+      begin: const Offset(0, 0.20),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _panelCtrl,
@@ -69,66 +67,74 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> loginUser() async {
     setState(() => isLoading = true);
     try {
-      var url = Uri.parse("$baseUrl/login.php");
-      final response = await http.post(url, body: {
-        "email": usernameController.text,
-        "password": passwordController.text,
-        "role": widget.role,
-      });
+      final res = await http.post(
+        Uri.parse('$baseUrl/login.php'),
+        body: {
+          'username': usernameController.text.trim(),
+          'password': passwordController.text.trim(),
+        },
+      );
 
-      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['status'] == 'success') {
+          final user = data['user'];
+          final role = user['role'];
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data["status"] == "success") {
-          if (widget.role == "Admin") {
-            Navigator.pushReplacement(
+          if (role == 'Admin') {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminDashboard()));
+          } else if (role == 'Staff') {
+            Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AdminDashboard()),
+              MaterialPageRoute(
+                builder: (_) => StaffDashboard(
+                  staffUserId: int.parse(user['id'].toString()),
+                  staffName: user['name'] ?? '',
+                  staffEmail: user['email'] ?? '',
+                ),
+              ),
             );
+          } else if (role == 'Parent') {
+            // TODO: هنا تضيف شاشة الآباء لما تجهزها
+            _snack('Parent login not implemented yet');
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Logged in as ${widget.role}")),
-            );
+            _snack('Unknown role: $role');
           }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("â‌Œ ${data["message"]}")),
-          );
+          _snack(data['message']);
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("â‌Œ Server error (${response.statusCode})")),
-        );
+        _snack("Server error: ${res.statusCode}");
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("âڑ ï¸ڈ Connection error: $e")),
-      );
+      _snack("Error: $e");
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-    if (!mounted) return;
-    setState(() => isLoading = false);
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset =
-        MediaQuery.of(context).viewInsets.bottom; // ط§ط±طھظپط§ط¹ ط§ظ„ظƒظٹط¨ظˆط±ط¯
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // ظٹط®ظ„ظٹ ط§ظ„ط¨ظˆط¯ظٹ ظٹط·ظ„ط¹ ظپظˆظ‚ ط§ظ„ظƒظٹط¨ظˆط±ط¯
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black), // ط³ظ‡ظ… ط§ظ„ط±ط¬ظˆط¹
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // ===== ط§ظ„ط¬ط²ط، ط§ظ„ط£ط¨ظٹط¶ ط§ظ„ط¹ظ„ظˆظٹ =====
+          // العنوان
           Expanded(
-            flex: 3, // 30%
+            flex: 3,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -154,9 +160,9 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
 
-          // ===== ط§ظ„ط¬ط²ط، ط§ظ„ط£ط®ط¶ط± ط§ظ„ط³ظپظ„ظٹ ظ…ط¹ ط§ظ„ط£ظ†ظٹظ…ظٹط´ظ† + ط­ظ„ظˆظ„ ط§ظ„ظƒظٹط¨ظˆط±ط¯ =====
+          // الفورم
           Expanded(
-            flex: 7, // 70%
+            flex: 7,
             child: SlideTransition(
               position: _slideUp,
               child: FadeTransition(
@@ -172,14 +178,12 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      // ظ†ط³طھط®ط¯ظ… ScrollView + padding ط³ظپظ„ظٹ ط¨ط§ط±طھظپط§ط¹ ط§ظ„ظƒظٹط¨ظˆط±ط¯
                       return SingleChildScrollView(
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
                         padding:
                             EdgeInsets.fromLTRB(28, 32, 28, 24 + bottomInset),
                         child: ConstrainedBox(
-                          // ظ„ظ…ط§ ط§ظ„ظƒظٹط¨ظˆط±ط¯ ظ…ظ‚ظپظˆظ„: ظˆط³ظ‘ط· ط¹ظ…ظˆط¯ظٹظ‹ط§ (minHeight = ط§ط±طھظپط§ط¹ ط§ظ„ط¨ط§ظ†ظ„ ظ†ط§ظ‚طµ ط§ظ„ظ‡ظˆط§ظ…ط´)
                           constraints: BoxConstraints(
                             minHeight: bottomInset == 0
                                 ? constraints.maxHeight - (32 + 24)
@@ -310,5 +314,3 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
-
-

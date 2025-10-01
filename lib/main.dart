@@ -80,10 +80,10 @@ class _SplashScreenState extends State<SplashScreen>
           child: FadeTransition(
             opacity: _fadeAnimation,
             child: Image.asset(
-            'assets/images/wethaq_logo.png',
+              'assets/images/wethaq_logo.png',
               width: 250,
               height: 250,
-           ),
+            ),
           ),
         ),
       ),
@@ -113,11 +113,10 @@ class WelcomeScreen extends StatelessWidget {
           children: [
             // Bigger logo
             Image.asset(
-            'assets/images/wethaq_logo.png',
-             width: 250,
-             height: 250,
-             ),
-
+              'assets/images/wethaq_logo.png',
+              width: 250,
+              height: 250,
+            ),
             const SizedBox(height: 22),
             const Text(
               'Wethaq System',

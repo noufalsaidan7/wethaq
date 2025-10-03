@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-const String baseUrl =
-    'http://192.168.1.28/wethaq'; // عدّلي هنا لمكان السيرفر عندك
+// const String baseUrl = 'http://192.168.1.28/wethaq';
+const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -16,7 +16,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard>
     with TickerProviderStateMixin {
-  // form keys & selection
+  // form keys
   final GlobalKey<FormState> _parentFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _childFormKey = GlobalKey<FormState>();
 
@@ -28,7 +28,7 @@ class _AdminDashboardState extends State<AdminDashboard>
   // tabs
   int _selectedIndex = 0;
 
-  // admin info
+  // admin info (ثابتة للواجهة فقط)
   String adminName = 'System Admin';
   String adminEmail = 'admin@wethaq.com';
 
@@ -45,10 +45,12 @@ class _AdminDashboardState extends State<AdminDashboard>
   String get listStaffApi => '$baseUrl/list_staff.php';
   String get listParentsApi => '$baseUrl/list_parents.php';
   String get listChildrenApi => '$baseUrl/list_children.php';
+
   String get staffAddApi => '$baseUrl/add_staff.php';
   String get parentAddApi => '$baseUrl/add_parent.php';
   String get parentUpdateApi => '$baseUrl/update_parent.php';
   String get childAddApi => '$baseUrl/add_child.php';
+
   String get staffDeleteApi => '$baseUrl/delete_staff.php';
   String get parentDeleteApi => '$baseUrl/delete_parent.php';
   String get childDeleteApi => '$baseUrl/delete_child.php';
@@ -63,6 +65,7 @@ class _AdminDashboardState extends State<AdminDashboard>
     await Future.wait([fetchStaff(), fetchParents(), fetchChildren()]);
   }
 
+  // ===== Fetchers =====
   Future<void> fetchStaff() async {
     setState(() => _loadingStaff = true);
     try {
@@ -92,26 +95,6 @@ class _AdminDashboardState extends State<AdminDashboard>
       final res = await http
           .get(Uri.parse(listParentsApi))
           .timeout(const Duration(seconds: 15));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data is Map && data['status'] == 'success') {
-          final items = (data['items'] as List?) ?? [];
-          parentList = items.map((e) => Map<String, dynamic>.from(e)).toList();
-        } else
-          parentList = [];
-      } else
-        parentList = [];
-    } catch (_) {
-      parentList = [];
-    }
-    if (mounted) setState(() => _loadingParents = false);
-  }
-
-  Future<void> fetchChildren() async {
-    setState(() => _loadingChildren = true);
-    try {
-      final url = Uri.parse('$baseUrl/list_children.php');
-      final res = await http.get(url).timeout(const Duration(seconds: 15));
 
       if (res.statusCode != 200) {
         throw Exception('HTTP ${res.statusCode}: ${res.body}');
@@ -119,13 +102,42 @@ class _AdminDashboardState extends State<AdminDashboard>
 
       final data = jsonDecode(res.body);
       if (data is Map && data['status'] == 'success') {
-        // يدعم children أو items (توافق مع القديم)
-        final list = (data['children'] ?? data['items'] ?? []) as List;
+        final items = (data['items'] as List?) ?? const [];
         setState(() {
-          childList = List<Map<String, dynamic>>.from(
-            list.map((e) => Map<String, dynamic>.from(e as Map)),
-          );
+          parentList =
+              items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         });
+      } else {
+        throw Exception(
+            (data is Map ? data['message'] : null) ?? 'Unknown error');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Parents fetch failed: $e')),
+      );
+      setState(() => parentList = []);
+    } finally {
+      if (mounted) setState(() => _loadingParents = false);
+    }
+  }
+
+  Future<void> fetchChildren() async {
+    setState(() => _loadingChildren = true);
+    try {
+      final res = await http
+          .get(Uri.parse(listChildrenApi))
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode != 200) {
+        throw Exception('HTTP ${res.statusCode}: ${res.body}');
+      }
+      final data = jsonDecode(res.body);
+      if (data is Map && data['status'] == 'success') {
+        final list = (data['children'] ?? data['items'] ?? []) as List;
+        childList = List<Map<String, dynamic>>.from(
+          list.map((e) => Map<String, dynamic>.from(e as Map)),
+        );
       } else {
         throw Exception(
             (data is Map ? data['message'] : null) ?? 'Unknown error');
@@ -135,6 +147,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Children fetch failed: $e')),
       );
+      childList = [];
     } finally {
       if (mounted) setState(() => _loadingChildren = false);
     }
@@ -145,11 +158,13 @@ class _AdminDashboardState extends State<AdminDashboard>
     final res = await http
         .post(Uri.parse(url), body: body)
         .timeout(const Duration(seconds: 20));
-    if (res.statusCode != 200)
+    if (res.statusCode != 200) {
       throw Exception('HTTP ${res.statusCode}: ${res.body}');
+    }
     final decoded = jsonDecode(res.body);
-    if (decoded is! Map<String, dynamic>)
+    if (decoded is! Map<String, dynamic>) {
       throw Exception('Invalid JSON: ${res.body}');
+    }
     return decoded;
   }
 
@@ -185,12 +200,14 @@ class _AdminDashboardState extends State<AdminDashboard>
         ),
         actions: [
           Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6.0),
-              child: _Avatar(initials: _initials(adminName))),
+            padding: const EdgeInsets.symmetric(horizontal: 6.0),
+            child: _Avatar(initials: _initials(adminName)),
+          ),
           IconButton(
-              tooltip: 'Logout',
-              icon: const Icon(Icons.logout, color: Colors.black87),
-              onPressed: _confirmLogout),
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout, color: Colors.black87),
+            onPressed: _confirmLogout,
+          ),
         ],
       ),
       body: IndexedStack(
@@ -222,94 +239,114 @@ class _AdminDashboardState extends State<AdminDashboard>
     final staffCount = staffList.length;
     final parentCount = parentList.length;
     final childrenCount = childList.length;
+
     return RefreshIndicator(
       onRefresh: _refreshAll,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          _GlassCard(
+        child: Column(
+          children: [
+            _GlassCard(
               child: ListTile(
-            contentPadding: const EdgeInsets.all(12),
-            leading: _Avatar(initials: _initials(adminName), big: true),
-            title: Text(adminName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    color: Colors.black87)),
-            subtitle: Text(adminEmail,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.black54)),
-            trailing: ElevatedButton.icon(
-                onPressed: _openEditProfileSheet,
-                icon: const Icon(Icons.edit),
-                label: const Text('Edit'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: kButtonBg, foregroundColor: kGreen)),
-          )),
-          const SizedBox(height: 16),
-          _statCard(
+                contentPadding: const EdgeInsets.all(12),
+                leading: _Avatar(initials: _initials(adminName), big: true),
+                title: Text(
+                  adminName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: Colors.black87),
+                ),
+                subtitle: Text(
+                  adminEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.black54),
+                ),
+                trailing: ElevatedButton.icon(
+                  onPressed: _openEditProfileSheet,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kButtonBg,
+                    foregroundColor: kGreen,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _statCard(
               icon: Icons.badge,
               title: 'Staff',
               count: staffCount,
               loading: _loadingStaff,
-              onTap: () => setState(() => _selectedIndex = 1)),
-          const SizedBox(height: 8),
-          _statCard(
+              onTap: () => setState(() => _selectedIndex = 1),
+            ),
+            const SizedBox(height: 8),
+            _statCard(
               icon: Icons.family_restroom,
               title: 'Parents',
               count: parentCount,
               loading: _loadingParents,
-              onTap: () => setState(() => _selectedIndex = 2)),
-          const SizedBox(height: 8),
-          _statCard(
+              onTap: () => setState(() => _selectedIndex = 2),
+            ),
+            const SizedBox(height: 8),
+            _statCard(
               icon: Icons.school,
               title: 'Children',
               count: childrenCount,
               loading: _loadingChildren,
-              onTap: () => setState(() => _selectedIndex = 3)),
-        ]),
+              onTap: () => setState(() => _selectedIndex = 3),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _statCard(
-      {required IconData icon,
-      required String title,
-      required int count,
-      required bool loading,
-      VoidCallback? onTap}) {
+  Widget _statCard({
+    required IconData icon,
+    required String title,
+    required int count,
+    required bool loading,
+    VoidCallback? onTap,
+  }) {
     return _GlassCard(
-        child: ListTile(
-      onTap: onTap,
-      leading: Icon(icon, color: kGreen),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      trailing: loading
-          ? const SizedBox(
-              width: 22, height: 22, child: CircularProgressIndicator())
-          : Text('$count',
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-    ));
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(icon, color: kGreen),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        trailing: loading
+            ? const SizedBox(
+                width: 22, height: 22, child: CircularProgressIndicator())
+            : Text('$count',
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+      ),
+    );
   }
 
+  // ===== Staff Tab =====
   Widget _buildStaffTab() {
     return RefreshIndicator(
-        onRefresh: fetchStaff,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(children: [
+      onRefresh: fetchStaff,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
             ElevatedButton.icon(
-                onPressed: _openAddStaffSheet,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Staff'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: kButtonBg,
-                    foregroundColor: kGreen,
-                    minimumSize: const Size(double.infinity, 48))),
+              onPressed: _openAddStaffSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Staff'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kButtonBg,
+                foregroundColor: kGreen,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: _loadingStaff
@@ -319,7 +356,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                           icon: Icons.badge,
                           title: 'No staff yet',
                           subtitle:
-                              'Tap “Add Staff” to create the first member.')
+                              'Tap “Add Staff” to create the first member.',
+                        )
                       : ListView.separated(
                           itemCount: staffList.length,
                           separatorBuilder: (_, __) =>
@@ -330,47 +368,64 @@ class _AdminDashboardState extends State<AdminDashboard>
                             final email = '${s['email'] ?? '-'}';
                             final phone = '${s['phone'] ?? '-'}';
                             return _GlassCard(
-                                child: ListTile(
-                              leading: _Avatar(initials: _initials(name)),
-                              title: Text(name,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text('Email: $email\nPhone: $phone',
-                                  maxLines: 2, overflow: TextOverflow.ellipsis),
-                              isThreeLine: true,
-                              trailing: Wrap(spacing: 6, children: [
-                                IconButton(
-                                    tooltip: 'Edit',
-                                    icon: const Icon(Icons.edit,
-                                        color: Colors.black87),
-                                    onPressed: () => _openEditStaffSheet(s)),
-                                IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete,
-                                        color: Colors.redAccent),
-                                    onPressed: () => _deleteStaff(s)),
-                              ]),
-                              onTap: () => _openEditStaffSheet(s),
-                            ));
-                          }),
+                              child: ListTile(
+                                leading: _Avatar(initials: _initials(name)),
+                                title: Text(name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                  'Email: $email\nPhone: $phone',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                isThreeLine: true,
+                                trailing: Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Edit',
+                                      icon: const Icon(Icons.edit,
+                                          color: Colors.black87),
+                                      onPressed: () => _openEditStaffSheet(s),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.redAccent),
+                                      onPressed: () => _deleteStaff(s),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () => _openEditStaffSheet(s),
+                              ),
+                            );
+                          },
+                        ),
             ),
-          ]),
-        ));
+          ],
+        ),
+      ),
+    );
   }
 
+  // ===== Parents Tab =====
   Widget _buildParentsTab() {
     return RefreshIndicator(
-        onRefresh: fetchParents,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(children: [
+      onRefresh: fetchParents,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
             ElevatedButton.icon(
-                onPressed: _openAddParentSheet,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Parent'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: kButtonBg,
-                    foregroundColor: kGreen,
-                    minimumSize: const Size(double.infinity, 48))),
+              onPressed: _openAddParentSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Parent'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kButtonBg,
+                foregroundColor: kGreen,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: _loadingParents
@@ -380,7 +435,8 @@ class _AdminDashboardState extends State<AdminDashboard>
                           icon: Icons.family_restroom,
                           title: 'No parents yet',
                           subtitle:
-                              'Tap “Add Parent” to create the first parent.')
+                              'Tap “Add Parent” to create the first parent.',
+                        )
                       : ListView.separated(
                           itemCount: parentList.length,
                           separatorBuilder: (_, __) =>
@@ -390,41 +446,55 @@ class _AdminDashboardState extends State<AdminDashboard>
                             final name = '${p['name'] ?? '-'}';
                             final email = '${p['email'] ?? '-'}';
                             final phone = '${p['phone'] ?? '-'}';
+
+                            // عدد أطفال هذا الأب من childList
                             final childCount = childList
-                                .where((c) =>
-                                    '${c['parent_user_id']}' == '${p['id']}')
+                                .where((cc) =>
+                                    '${cc['parent_user_id']}' == '${p['id']}')
                                 .length;
+
                             return _GlassCard(
-                                child: ListTile(
-                              leading: _Avatar(initials: _initials(name)),
-                              title: Text(name,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text(
+                              child: ListTile(
+                                leading: _Avatar(initials: _initials(name)),
+                                title: Text(name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
                                   'Email: $email\nPhone: $phone\nChildren: $childCount',
                                   maxLines: 3,
-                                  overflow: TextOverflow.ellipsis),
-                              isThreeLine: true,
-                              trailing: Wrap(spacing: 6, children: [
-                                IconButton(
-                                    tooltip: 'Edit',
-                                    icon: const Icon(Icons.edit,
-                                        color: Colors.black87),
-                                    onPressed: () => _openEditParentSheet(p)),
-                                IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete,
-                                        color: Colors.redAccent),
-                                    onPressed: () => _deleteParent(p)),
-                              ]),
-                              onTap: () => _openEditParentSheet(p),
-                            ));
-                          }),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                isThreeLine: true,
+                                trailing: Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Edit',
+                                      icon: const Icon(Icons.edit,
+                                          color: Colors.black87),
+                                      onPressed: () => _openEditParentSheet(p),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.redAccent),
+                                      onPressed: () => _deleteParent(p),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () => _openEditParentSheet(p),
+                              ),
+                            );
+                          },
+                        ),
             ),
-          ]),
-        ));
+          ],
+        ),
+      ),
+    );
   }
 
-  // ===== Children =====
+  // ===== Children Tab =====
   Widget _buildChildrenTab() {
     return RefreshIndicator(
       onRefresh: fetchChildren,
@@ -432,7 +502,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ← هذا الزر هو اللي كان مختفي
+            // زر الإضافة (كان السبب أنه ما يظهر من قبل)
             ElevatedButton.icon(
               onPressed: _openAddChildSheet,
               icon: const Icon(Icons.add),
@@ -444,7 +514,6 @@ class _AdminDashboardState extends State<AdminDashboard>
               ),
             ),
             const SizedBox(height: 12),
-
             Expanded(
               child: _loadingChildren
                   ? const Center(child: CircularProgressIndicator())
@@ -515,63 +584,76 @@ class _AdminDashboardState extends State<AdminDashboard>
     );
   }
 
-  // ===== BottomSheets & Actions =====
-
+  // ===== Profile Sheet =====
   void _openEditProfileSheet() {
     final nameCtrl = TextEditingController(text: adminName);
     final emailCtrl = TextEditingController(text: adminEmail);
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        builder: (ctx) {
-          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-          final safeBottom = MediaQuery.of(ctx).padding.bottom;
-          return SafeArea(
-              top: false,
-              child: Padding(
-                  padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 20,
-                      bottom: viewInsets + safeBottom + 16),
-                  child: SingleChildScrollView(
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const _SheetTitle('Edit Profile'),
-                    TextField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(labelText: 'Name')),
-                    const SizedBox(height: 12),
-                    TextField(
-                        controller: emailCtrl,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                if (nameCtrl.text.trim().isNotEmpty)
-                                  adminName = nameCtrl.text.trim();
-                                if (emailCtrl.text.trim().isNotEmpty)
-                                  adminEmail = emailCtrl.text.trim();
-                              });
-                              Navigator.pop(ctx);
-                              _snack('Profile updated');
-                            },
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: kGreen,
-                                foregroundColor: Colors.white),
-                            child: const Text('Save'))),
-                  ]))));
-        });
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 20,
+                bottom: viewInsets + safeBottom + 16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const _SheetTitle('Edit Profile'),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          if (nameCtrl.text.trim().isNotEmpty) {
+                            adminName = nameCtrl.text.trim();
+                          }
+                          if (emailCtrl.text.trim().isNotEmpty) {
+                            adminEmail = emailCtrl.text.trim();
+                          }
+                        });
+                        Navigator.pop(ctx);
+                        _snack('Profile updated');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kGreen,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Save'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
-  // ---- Staff add/edit/delete ----
+  // ===== Staff add/edit/delete =====
   void _openAddStaffSheet() {
     final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController();
@@ -579,129 +661,127 @@ class _AdminDashboardState extends State<AdminDashboard>
     final phoneCtrl = TextEditingController();
     final empCtrl = TextEditingController();
     String password = _generatePassword();
+
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        builder: (ctx) {
-          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-          final safeBottom = MediaQuery.of(ctx).padding.bottom;
-          return StatefulBuilder(
-              builder: (ctx, setM) => SafeArea(
-                  top: false,
-                  child: Padding(
-                      padding: EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 20,
-                          bottom: viewInsets + safeBottom + 16),
-                      child: SingleChildScrollView(
-                          child: Form(
-                              key: formKey,
-                              child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const _SheetHeader(title: 'Add Staff'),
-                                    TextFormField(
-                                        controller: nameCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Name'),
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: emailCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Email'),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: phoneCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Phone Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: empCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText:
-                                                'Employee Number (4 digits)'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) => (v == null ||
-                                                v.trim().isEmpty ||
-                                                v.trim().length < 4)
-                                            ? 'Required 4 digits'
-                                            : null),
-                                    const SizedBox(height: 16),
-                                    ActionChip(
-                                      avatar: const Icon(Icons.key, size: 18),
-                                      label: Text('Password: $password',
-                                          overflow: TextOverflow.ellipsis),
-                                      onPressed: () async {
-                                        await Clipboard.setData(
-                                            ClipboardData(text: password));
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(const SnackBar(
-                                                content:
-                                                    Text('Password copied')));
-                                      },
-                                      backgroundColor: kButtonBg,
-                                      labelStyle: const TextStyle(
-                                          color: kGreen,
-                                          fontWeight: FontWeight.w600),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                            onPressed: () async {
-                                              if (!(formKey.currentState
-                                                      ?.validate() ??
-                                                  false)) return;
-                                              Navigator.pop(ctx);
-                                              try {
-                                                final result = await _postJson(
-                                                    staffAddApi, {
-                                                  'name': nameCtrl.text.trim(),
-                                                  'email':
-                                                      emailCtrl.text.trim(),
-                                                  'password': password,
-                                                  'phone':
-                                                      phoneCtrl.text.trim(),
-                                                  'employee_number':
-                                                      empCtrl.text.trim(),
-                                                });
-                                                if (result['status'] ==
-                                                    'success') {
-                                                  _snack('Staff added');
-                                                  await fetchStaff();
-                                                } else
-                                                  _snack(
-                                                      'Server said: ${result['message']}');
-                                              } catch (e) {
-                                                _snack('Server error: $e');
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: kGreen,
-                                                foregroundColor: Colors.white),
-                                            child: const Text('Add Staff'))),
-                                  ]))))));
-        });
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        return StatefulBuilder(
+          builder: (ctx, setM) => SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 20,
+                  bottom: viewInsets + safeBottom + 16),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _SheetHeader(title: 'Add Staff'),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: phoneCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Phone Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: empCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Employee Number (4 digits)'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => (v == null ||
+                                v.trim().isEmpty ||
+                                v.trim().length < 4)
+                            ? 'Required 4 digits'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                      ActionChip(
+                        avatar: const Icon(Icons.key, size: 18),
+                        label: Text('Password: $password',
+                            overflow: TextOverflow.ellipsis),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: password));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Password copied')),
+                          );
+                        },
+                        backgroundColor: kButtonBg,
+                        labelStyle: const TextStyle(
+                            color: kGreen, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!(formKey.currentState?.validate() ?? false)) {
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            try {
+                              final result = await _postJson(staffAddApi, {
+                                'name': nameCtrl.text.trim(),
+                                'email': emailCtrl.text.trim(),
+                                'password': password,
+                                'phone': phoneCtrl.text.trim(),
+                                'employee_number': empCtrl.text.trim(),
+                              });
+                              if (result['status'] == 'success') {
+                                _snack('Staff added');
+                                await fetchStaff();
+                              } else {
+                                _snack('Server said: ${result['message']}');
+                              }
+                            } catch (e) {
+                              _snack('Server error: $e');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGreen,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Add Staff'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _openEditStaffSheet(Map<String, dynamic> staff) {
@@ -712,97 +792,101 @@ class _AdminDashboardState extends State<AdminDashboard>
     final empCtrl =
         TextEditingController(text: '${staff['employee_number'] ?? ''}');
     final passCtrl = TextEditingController();
+
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        builder: (ctx) {
-          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-          final safeBottom = MediaQuery.of(ctx).padding.bottom;
-          return StatefulBuilder(
-              builder: (ctx, setM) => SafeArea(
-                  top: false,
-                  child: Padding(
-                      padding: EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 20,
-                          bottom: viewInsets + safeBottom + 16),
-                      child: SingleChildScrollView(
-                          child: Form(
-                              key: formKey,
-                              child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const _SheetHeader(title: 'Edit Staff'),
-                                    TextFormField(
-                                        controller: nameCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Name'),
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: emailCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Email'),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: phoneCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Phone Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: empCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Employee Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: passCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText:
-                                                'New Password (optional)'),
-                                        obscureText: true),
-                                    const SizedBox(height: 16),
-                                    SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                            onPressed: () async {
-                                              if (!(formKey.currentState
-                                                      ?.validate() ??
-                                                  false)) return;
-                                              Navigator.pop(ctx);
-                                              // update API not provided here: implement update_staff.php if needed
-                                              _snack(
-                                                  'Save changes not implemented for staff update in this snippet.');
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: kGreen,
-                                                foregroundColor: Colors.white),
-                                            child: const Text('Save changes'))),
-                                  ]))))));
-        });
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        return StatefulBuilder(
+          builder: (ctx, setM) => SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 20,
+                  bottom: viewInsets + safeBottom + 16),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _SheetHeader(title: 'Edit Staff'),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: phoneCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Phone Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: empCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Employee Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'New Password (optional)'),
+                        obscureText: true,
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!(formKey.currentState?.validate() ?? false)) {
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            // مافيه update_staff.php بهذا السنابت
+                            _snack(
+                                'Save changes not implemented for staff update in this snippet.');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGreen,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Save changes'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _deleteStaff(Map<String, dynamic> staff) async {
@@ -810,27 +894,24 @@ class _AdminDashboardState extends State<AdminDashboard>
         'Are you sure you want to delete ${staff['name'] ?? 'this staff'}?');
     if (!ok) return;
     try {
-      final payload = <String, String>{
+      final res = await http.post(Uri.parse(staffDeleteApi), body: {
         'user_id': '${staff['id'] ?? staff['user_id'] ?? ''}'
-      };
-      final res = await http
-          .post(Uri.parse(staffDeleteApi), body: payload)
-          .timeout(const Duration(seconds: 20));
+      }).timeout(const Duration(seconds: 20));
       final data = jsonDecode(res.body);
       if (data['status'] == 'success') {
         _snack('Staff deleted');
         await fetchStaff();
-      } else
+      } else {
         _snack('Server said: ${data['message']}');
+      }
     } catch (e) {
       _snack('Server error: $e');
     }
   }
 
-  // ---- Parent add/edit/delete ----
-
+  // ===== Parent add/edit/delete =====
   void _openAddParentSheet() async {
-    // ensure staff loaded
+    // نتأكد أنّ قائمة المعلّمين محمّلة لاختيار المعلّم
     if (staffList.isEmpty) {
       setState(() => _loadingStaff = true);
       await fetchStaff();
@@ -846,158 +927,148 @@ class _AdminDashboardState extends State<AdminDashboard>
     final phoneCtrl = TextEditingController();
     final idCtrl = TextEditingController();
     String password = _generatePassword();
-    String? selectedStaffId; // id string
+    String? selectedStaffId;
 
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        builder: (ctx) {
-          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-          final safeBottom = MediaQuery.of(ctx).padding.bottom;
-          return StatefulBuilder(
-              builder: (ctx, setM) => SafeArea(
-                  top: false,
-                  child: Padding(
-                      padding: EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 20,
-                          bottom: viewInsets + safeBottom + 16),
-                      child: SingleChildScrollView(
-                          child: Form(
-                              key: _parentFormKey,
-                              child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const _SheetHeader(title: 'Add Parent'),
-                                    TextFormField(
-                                        controller: nameCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Name'),
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: emailCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Email'),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: phoneCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Phone Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: idCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText:
-                                                'ID Number (min 5 digits)'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) => (v == null ||
-                                                v.trim().isEmpty ||
-                                                v.trim().length < 5)
-                                            ? 'Required (min 5 digits)'
-                                            : null),
-                                    const SizedBox(height: 12),
-
-                                    // Dropdown: assign staff (REQUIRED)
-                                    DropdownButtonFormField<String>(
-                                      value: selectedStaffId,
-                                      isExpanded: true,
-                                      items: staffList
-                                          .map<DropdownMenuItem<String>>((s) {
-                                        final display =
-                                            '${s['name'] ?? s['email'] ?? ''}';
-                                        return DropdownMenuItem(
-                                            value: '${s['id']}',
-                                            child: Text(display,
-                                                overflow:
-                                                    TextOverflow.ellipsis));
-                                      }).toList(),
-                                      onChanged: (v) =>
-                                          setM(() => selectedStaffId = v),
-                                      decoration: const InputDecoration(
-                                          labelText: 'Assign Staff (required)'),
-                                      validator: (v) => (v == null || v.isEmpty)
-                                          ? 'Please select a staff'
-                                          : null,
-                                    ),
-
-                                    const SizedBox(height: 16),
-                                    ActionChip(
-                                        avatar: const Icon(Icons.key, size: 18),
-                                        label: Text('Password: $password',
-                                            overflow: TextOverflow.ellipsis),
-                                        onPressed: () async {
-                                          await Clipboard.setData(
-                                              ClipboardData(text: password));
-                                          _snack('Password copied');
-                                        },
-                                        backgroundColor: kButtonBg,
-                                        labelStyle: const TextStyle(
-                                            color: kGreen,
-                                            fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 16),
-
-                                    SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                            onPressed: () async {
-                                              if (!(_parentFormKey.currentState
-                                                      ?.validate() ??
-                                                  false)) return;
-                                              Navigator.pop(ctx);
-                                              try {
-                                                final result = await _postJson(
-                                                    parentAddApi, {
-                                                  'name': nameCtrl.text.trim(),
-                                                  'email':
-                                                      emailCtrl.text.trim(),
-                                                  'password': password,
-                                                  'phone':
-                                                      phoneCtrl.text.trim(),
-                                                  'identity_number':
-                                                      idCtrl.text.trim(),
-                                                  'assigned_staff_user_id':
-                                                      selectedStaffId ?? '',
-                                                });
-                                                if (result['status'] ==
-                                                    'success') {
-                                                  _snack('Parent added');
-                                                  await Future.wait([
-                                                    fetchParents(),
-                                                    fetchChildren()
-                                                  ]);
-                                                } else
-                                                  _snack(
-                                                      'Server said: ${result['message']}');
-                                              } catch (e) {
-                                                _snack('Server error: $e');
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: kGreen,
-                                                foregroundColor: Colors.white),
-                                            child: const Text('Add Parent'))),
-                                  ]))))));
-        });
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        return StatefulBuilder(
+          builder: (ctx, setM) => SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 20,
+                  bottom: viewInsets + safeBottom + 16),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: _parentFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _SheetHeader(title: 'Add Parent'),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: phoneCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Phone Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: idCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'ID Number (min 5 digits)'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) => (v == null ||
+                                v.trim().isEmpty ||
+                                v.trim().length < 5)
+                            ? 'Required (min 5 digits)'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedStaffId,
+                        isExpanded: true,
+                        items: staffList.map<DropdownMenuItem<String>>((s) {
+                          final display = '${s['name'] ?? s['email'] ?? ''}';
+                          return DropdownMenuItem(
+                            value: '${s['id']}',
+                            child:
+                                Text(display, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (v) => setM(() => selectedStaffId = v),
+                        decoration: const InputDecoration(
+                            labelText: 'Assign Staff (required)'),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select a staff'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                      ActionChip(
+                        avatar: const Icon(Icons.key, size: 18),
+                        label: Text('Password: $password',
+                            overflow: TextOverflow.ellipsis),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: password));
+                          _snack('Password copied');
+                        },
+                        backgroundColor: kButtonBg,
+                        labelStyle: const TextStyle(
+                            color: kGreen, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!(_parentFormKey.currentState?.validate() ??
+                                false)) {
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            try {
+                              final result = await _postJson(parentAddApi, {
+                                'name': nameCtrl.text.trim(),
+                                'email': emailCtrl.text.trim(),
+                                'password': password,
+                                'phone': phoneCtrl.text.trim(),
+                                'identity_number': idCtrl.text.trim(),
+                                'assigned_staff_user_id': selectedStaffId ?? '',
+                              });
+                              if (result['status'] == 'success') {
+                                _snack('Parent added');
+                                await Future.wait(
+                                    [fetchParents(), fetchChildren()]);
+                              } else {
+                                _snack('Server said: ${result['message']}');
+                              }
+                            } catch (e) {
+                              _snack('Server error: $e');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGreen,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Add Parent'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _openEditParentSheet(Map<String, dynamic> parent) {
@@ -1010,159 +1081,151 @@ class _AdminDashboardState extends State<AdminDashboard>
     final passCtrl = TextEditingController();
 
     String? selectedStaffId = parent['assigned_staff_user_id']?.toString();
-    // if selected id not in staffList, null it
     if (selectedStaffId != null &&
-        !staffList.any((s) => '${s['id']}' == selectedStaffId))
+        !staffList.any((s) => '${s['id']}' == selectedStaffId)) {
       selectedStaffId = null;
-
+    }
     if (staffList.isEmpty) {
       _snack('No staff available. Fetching...');
       fetchStaff();
     }
 
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-        builder: (ctx) {
-          final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-          final safeBottom = MediaQuery.of(ctx).padding.bottom;
-          return StatefulBuilder(
-              builder: (ctx, setM) => SafeArea(
-                  top: false,
-                  child: Padding(
-                      padding: EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 20,
-                          bottom: viewInsets + safeBottom + 16),
-                      child: SingleChildScrollView(
-                          child: Form(
-                              key: formKey,
-                              child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const _SheetHeader(title: 'Edit Parent'),
-                                    TextFormField(
-                                        controller: nameCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Name'),
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: emailCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Email'),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: phoneCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Phone Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: idCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText: 'ID Number'),
-                                        keyboardType: TextInputType.number,
-                                        validator: (v) =>
-                                            (v == null || v.trim().isEmpty)
-                                                ? 'Required'
-                                                : null),
-                                    const SizedBox(height: 12),
-                                    DropdownButtonFormField<String>(
-                                      value: selectedStaffId,
-                                      isExpanded: true,
-                                      items: staffList
-                                          .map((s) => DropdownMenuItem(
-                                              value: '${s['id']}',
-                                              child: Text(
-                                                  '${s['name'] ?? s['email'] ?? ''}',
-                                                  overflow:
-                                                      TextOverflow.ellipsis)))
-                                          .toList(),
-                                      onChanged: (v) =>
-                                          setM(() => selectedStaffId = v),
-                                      decoration: const InputDecoration(
-                                          labelText: 'Assign Staff (required)'),
-                                      validator: (v) => (v == null || v.isEmpty)
-                                          ? 'Please select a staff'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: passCtrl,
-                                        decoration: const InputDecoration(
-                                            labelText:
-                                                'New Password (optional)'),
-                                        obscureText: true),
-                                    const SizedBox(height: 16),
-                                    SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                            onPressed: () async {
-                                              if (!(formKey.currentState
-                                                      ?.validate() ??
-                                                  false)) return;
-                                              Navigator.pop(ctx);
-                                              try {
-                                                final payload =
-                                                    <String, String>{
-                                                  'user_id':
-                                                      '${parent['id'] ?? parent['user_id'] ?? ''}',
-                                                  'name': nameCtrl.text.trim(),
-                                                  'new_email':
-                                                      emailCtrl.text.trim(),
-                                                  'phone':
-                                                      phoneCtrl.text.trim(),
-                                                  'identity_number':
-                                                      idCtrl.text.trim(),
-                                                  'assigned_staff_user_id':
-                                                      selectedStaffId ?? '',
-                                                };
-                                                if (passCtrl.text
-                                                    .trim()
-                                                    .isNotEmpty)
-                                                  payload['password'] =
-                                                      passCtrl.text.trim();
-                                                final result = await _postJson(
-                                                    parentUpdateApi, payload);
-                                                if (result['status'] ==
-                                                    'success') {
-                                                  _snack('Parent updated');
-                                                  await Future.wait([
-                                                    fetchParents(),
-                                                    fetchChildren()
-                                                  ]);
-                                                } else
-                                                  _snack(
-                                                      'Server said: ${result['message']}');
-                                              } catch (e) {
-                                                _snack('Server error: $e');
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                                backgroundColor: kGreen,
-                                                foregroundColor: Colors.white),
-                                            child: const Text('Save changes'))),
-                                  ]))))));
-        });
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final safeBottom = MediaQuery.of(ctx).padding.bottom;
+        return StatefulBuilder(
+          builder: (ctx, setM) => SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 20,
+                  bottom: viewInsets + safeBottom + 16),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _SheetHeader(title: 'Edit Parent'),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: phoneCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Phone Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: idCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'ID Number'),
+                        keyboardType: TextInputType.number,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedStaffId,
+                        isExpanded: true,
+                        items: staffList
+                            .map((s) => DropdownMenuItem(
+                                  value: '${s['id']}',
+                                  child: Text(
+                                    '${s['name'] ?? s['email'] ?? ''}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setM(() => selectedStaffId = v),
+                        decoration: const InputDecoration(
+                            labelText: 'Assign Staff (required)'),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select a staff'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'New Password (optional)'),
+                        obscureText: true,
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!(formKey.currentState?.validate() ?? false)) {
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            try {
+                              final payload = <String, String>{
+                                'user_id':
+                                    '${parent['id'] ?? parent['user_id'] ?? ''}',
+                                'name': nameCtrl.text.trim(),
+                                'new_email': emailCtrl.text.trim(),
+                                'phone': phoneCtrl.text.trim(),
+                                'identity_number': idCtrl.text.trim(),
+                                'assigned_staff_user_id': selectedStaffId ?? '',
+                              };
+                              if (passCtrl.text.trim().isNotEmpty) {
+                                payload['password'] = passCtrl.text.trim();
+                              }
+                              final result =
+                                  await _postJson(parentUpdateApi, payload);
+                              if (result['status'] == 'success') {
+                                _snack('Parent updated');
+                                await Future.wait(
+                                    [fetchParents(), fetchChildren()]);
+                              } else {
+                                _snack('Server said: ${result['message']}');
+                              }
+                            } catch (e) {
+                              _snack('Server error: $e');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGreen,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Save changes'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _deleteParent(Map<String, dynamic> parent) async {
@@ -1177,14 +1240,15 @@ class _AdminDashboardState extends State<AdminDashboard>
       if (data['status'] == 'success') {
         _snack('Parent deleted');
         await Future.wait([fetchParents(), fetchChildren()]);
-      } else
+      } else {
         _snack('Server said: ${data['message']}');
+      }
     } catch (e) {
       _snack('Server error: $e');
     }
   }
 
-  // ---- Children add/delete ----
+  // ===== Children add/edit/delete =====
   void _openAddChildSheet() {
     if (parentList.isEmpty) {
       _snack('Add a parent first.');
@@ -1202,8 +1266,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         final bottom = MediaQuery.of(ctx).viewInsets.bottom + 16;
         return Padding(
@@ -1253,19 +1316,16 @@ class _AdminDashboardState extends State<AdminDashboard>
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        if (!(formKey.currentState?.validate() ?? false))
+                        if (!(formKey.currentState?.validate() ?? false)) {
                           return;
+                        }
                         Navigator.pop(ctx);
-
                         try {
-                          final res = await _postJson(
-                            childAddApi,
-                            {
-                              'parent_id': selectedParentId!, // required
-                              'name': nameCtrl.text.trim(), // required
-                              'class': classCtrl.text.trim(), // optional
-                            },
-                          );
+                          final res = await _postJson(childAddApi, {
+                            'parent_id': selectedParentId!,
+                            'name': nameCtrl.text.trim(),
+                            'class': classCtrl.text.trim(),
+                          });
                           if (res['status'] == 'success') {
                             _snack('Child added');
                             await fetchChildren();
@@ -1309,8 +1369,7 @@ class _AdminDashboardState extends State<AdminDashboard>
       useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         final inset = MediaQuery.of(ctx).viewInsets.bottom;
         return Padding(
@@ -1437,47 +1496,51 @@ class _AdminDashboardState extends State<AdminDashboard>
 
   Future<bool> _confirmDelete(String title, String message) async {
     return await showDialog<bool>(
-            context: context,
-            builder: (_) => AlertDialog(
-                    title: Text(title),
-                    content: Text(message),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
-                      ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Delete')),
-                    ])) ??
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kGreen, foregroundColor: Colors.white),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
         false;
   }
 
   Future<void> _confirmLogout() async {
     final ok = await showDialog<bool>(
-            context: context,
-            builder: (_) => AlertDialog(
-                    title: const Text('Log out'),
-                    content: const Text('Are you sure you want to log out?'),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
-                      ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: kGreen,
-                              foregroundColor: Colors.white),
-                          child: const Text('Log out')),
-                    ])) ??
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Log out'),
+            content: const Text('Are you sure you want to log out?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kGreen, foregroundColor: Colors.white),
+                child: const Text('Log out'),
+              ),
+            ],
+          ),
+        ) ??
         false;
     if (ok && mounted) Navigator.pop(context);
   }
 }
 
-// small widgets
+// ===== small widgets =====
 class _Avatar extends StatelessWidget {
   final String initials;
   final bool big;
@@ -1485,18 +1548,23 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CircleAvatar(
-        radius: big ? 24 : 18,
-        backgroundColor: _AdminDashboardState.kPanelLight,
-        child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(initials,
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: TextStyle(
-                    color: _AdminDashboardState.kGreen,
-                    fontWeight: FontWeight.w700,
-                    fontSize: big ? 16 : 12,
-                    height: 1.0))));
+      radius: big ? 24 : 18,
+      backgroundColor: _AdminDashboardState.kPanelLight,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          initials,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          style: TextStyle(
+            color: _AdminDashboardState.kGreen,
+            fontWeight: FontWeight.w700,
+            fontSize: big ? 16 : 12,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1506,11 +1574,13 @@ class _GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-            color: _AdminDashboardState.kPanelLight,
-            borderRadius: BorderRadius.circular(12)),
-        child: child);
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: _AdminDashboardState.kPanelLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
+    );
   }
 }
 
@@ -1523,15 +1593,18 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, size: 42, color: _AdminDashboardState.kGreen),
-      const SizedBox(height: 8),
-      Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      const SizedBox(height: 4),
-      Text(subtitle,
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(icon, size: 42, color: _AdminDashboardState.kGreen),
+        const SizedBox(height: 8),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.black54)),
-    ]));
+          style: const TextStyle(color: Colors.black54),
+        ),
+      ]),
+    );
   }
 }
 
@@ -1549,9 +1622,11 @@ class _SheetHeader extends StatelessWidget {
   const _SheetHeader({required this.title, this.trailing});
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      Expanded(child: _SheetTitle(title)),
-      if (trailing != null) trailing!
-    ]);
+    return Row(
+      children: [
+        Expanded(child: _SheetTitle(title)),
+        if (trailing != null) trailing!,
+      ],
+    );
   }
 }

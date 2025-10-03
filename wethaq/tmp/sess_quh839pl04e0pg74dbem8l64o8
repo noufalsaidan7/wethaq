@@ -1,0 +1,96 @@
+ PMA_token |s:32:"7e22257d6139653b6f3766442b605f26"; HMAC_secret |s:16:"_=IU]Y)pRy%uG+y"";browser_access_time|a:1:{s:7:"default";i:1759462959;}relation|a:1:{i:1;a:41:{s:7:"version";s:5:"5.2.1";s:4:"user";s:4:"root";s:2:"db";s:10:"phpmyadmin";s:8:"bookmark";s:13:"pma__bookmark";s:15:"central_columns";s:20:"pma__central_columns";s:11:"column_info";s:16:"pma__column_info";s:17:"designer_settings";s:22:"pma__designer_settings";s:16:"export_templates";s:21:"pma__export_templates";s:8:"favorite";s:13:"pma__favorite";s:7:"history";s:12:"pma__history";s:16:"navigationhiding";s:21:"pma__navigationhiding";s:9:"pdf_pages";s:14:"pma__pdf_pages";s:6:"recent";s:11:"pma__recent";s:8:"relation";s:13:"pma__relation";s:13:"savedsearches";s:18:"pma__savedsearches";s:12:"table_coords";s:17:"pma__table_coords";s:10:"table_info";s:15:"pma__table_info";s:13:"table_uiprefs";s:18:"pma__table_uiprefs";s:8:"tracking";s:13:"pma__tracking";s:10:"userconfig";s:15:"pma__userconfig";s:10:"usergroups";s:15:"pma__usergroups";s:5:"users";s:10:"pma__users";s:12:"bookmarkwork";b:1;s:8:"mimework";b:1;s:18:"centralcolumnswork";b:1;s:8:"commwork";b:1;s:9:"menuswork";b:1;s:20:"designersettingswork";b:1;s:11:"displaywork";b:1;s:19:"exporttemplateswork";b:1;s:12:"favoritework";b:1;s:7:"navwork";b:1;s:7:"pdfwork";b:1;s:10:"recentwork";b:1;s:7:"relwork";b:1;s:17:"savedsearcheswork";b:1;s:11:"historywork";b:1;s:12:"trackingwork";b:1;s:11:"uiprefswork";b:1;s:14:"userconfigwork";b:1;s:8:"allworks";b:1;}}tmpval|a:16:{s:14:"favoriteTables";a:1:{i:1;a:0:{}}s:12:"recentTables";a:1:{i:1;a:6:{i:0;a:2:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:5:"users";}i:1;a:2:{s:2:"db";s:10:"phpmyadmin";s:5:"table";s:10:"pma__users";}i:2;a:2:{s:2:"db";s:5:"mysql";s:5:"table";s:4:"user";}i:3;a:2:{s:2:"db";s:10:"phpmyadmin";s:5:"table";s:16:"pma__column_info";}i:4;a:2:{s:2:"db";s:10:"phpmyadmin";s:5:"table";s:20:"pma__central_columns";}i:5;a:2:{s:2:"db";s:10:"phpmyadmin";s:5:"table";s:13:"pma__bookmark";}}}s:18:"table_limit_offset";i:0;s:21:"table_limit_offset_db";s:9:"wethaq_db";s:5:"query";a:10:{s:32:"7360ae91a6904fd005ce8f5206d8b274";a:8:{s:3:"sql";s:180:"-- طفل تجريبي لولي الأمر
+INSERT INTO children (parent_user_id, child_name, class)
+SELECT id, 'Child A', '1A' FROM users WHERE email='parent@wethaq.com' LIMIT 1;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"b016c15ed37a1efe20101a50e000965d";a:8:{s:3:"sql";s:21:"SELECT * FROM `users`";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"80ae002f60410d033529b85d2d76a4a0";a:8:{s:3:"sql";s:25:"DROP DATABASE `wethaq_db`";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"cbb50751bf6dc3295e23de0faf18f2a5";a:8:{s:3:"sql";s:921:"-- ============== إعادة إنشاء القاعدة من الصفر =========
+CREATE TABLE users (
+  id                     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name                   VARCHAR(100)        NOT NULL,
+  email                  VARCHAR(100)        NOT NULL,
+  password               VARCHAR(255)        NOT NULL,
+  phone                  VARCHAR(20),
+  role                   ENUM('Admin','Staff','Parent') NOT NULL,
+  employee_number        VARCHAR(10),          -- للمعلم (4 أرقام)
+  identity_number        VARCHAR(20),          -- لولي الأمر (≥5 أرقام)
+  must_change_password   TINYINT(1) NOT NULL DEFAULT 0,
+  created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_users_email (email),
+  UNIQUE KEY uq_users_employee (employee_number),
+  UNIQUE KEY uq_users_identity (identity_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"6d7bec67e498a196c81778027fc521f1";a:8:{s:3:"sql";s:683:"-- ===================== parents (ربط Parent -> Staff) =====================
+CREATE TABLE parents (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  parent_user_id  INT UNSIGNED NOT NULL,
+  staff_user_id   INT UNSIGNED NOT NULL,
+  CONSTRAINT fk_parents_parent
+    FOREIGN KEY (parent_user_id) REFERENCES users(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_parents_staff
+    FOREIGN KEY (staff_user_id) REFERENCES users(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY uq_parent_user (parent_user_id),     -- كل ولي يرتبط بمعلم واحد
+  KEY idx_parents_staff (staff_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"9d5752f3b06216b35110d831a1b18e10";a:8:{s:3:"sql";s:538:"-- ===================== children =====================
+CREATE TABLE children (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  parent_user_id  INT UNSIGNED NOT NULL,
+  child_name      VARCHAR(100) NOT NULL,
+  class           VARCHAR(100),
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_children_parent
+    FOREIGN KEY (parent_user_id) REFERENCES users(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  KEY idx_children_parent (parent_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"69063708ecf7c99cff812b9f4d6896e9";a:8:{s:3:"sql";s:739:"-- ===================== announcements =====================
+CREATE TABLE announcements (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  staff_user_id   INT UNSIGNED NOT NULL,
+  parent_user_id  INT UNSIGNED NULL,
+  title           VARCHAR(200) NOT NULL,
+  body            TEXT NOT NULL,
+  created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ann_staff
+    FOREIGN KEY (staff_user_id) REFERENCES users(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_ann_parent
+    FOREIGN KEY (parent_user_id) REFERENCES users(id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  KEY idx_ann_staff (staff_user_id),
+  KEY idx_ann_parent (parent_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"7ffb83aec339776afe477ba1a357709c";a:8:{s:3:"sql";s:362:"-- ===================== بيانات تجريبية =====================
+INSERT INTO users (name,email,password,phone,role,must_change_password) VALUES
+('System Admin','admin@wethaq.com','admin123','0500000000','Admin',0),
+('Test Staff','staff@wethaq.com','1234','0550000000','Staff',1),
+('Test Parent','parent@wethaq.com','12345','0551111111','Parent',1);";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"56f553659013c98d8c2045f8b4970072";a:8:{s:3:"sql";s:211:"-- ربط ولي الأمر بالمعلم
+INSERT INTO parents (parent_user_id, staff_user_id)
+SELECT p.id, s.id FROM users p, users s
+WHERE p.email='parent@wethaq.com' AND s.email='staff@wethaq.com' LIMIT 1;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}s:32:"8d290b5302e754302526f4e354ea5bd6";a:8:{s:3:"sql";s:160:"-- طفل تجريبي
+INSERT INTO children (parent_user_id, child_name, class)
+SELECT id, 'Child A', '1A' FROM users WHERE email='parent@wethaq.com' LIMIT 1;";s:12:"repeat_cells";i:100;s:8:"max_rows";i:25;s:3:"pos";i:0;s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;}}s:6:"pftext";s:1:"P";s:18:"relational_display";s:1:"K";s:9:"geoOption";s:4:"GEOM";s:14:"display_binary";b:1;s:12:"display_blob";b:0;s:19:"hide_transformation";b:0;s:3:"pos";i:0;s:8:"max_rows";i:25;s:12:"repeat_cells";i:100;s:20:"possible_as_geometry";b:1;s:13:"table_uiprefs";a:1:{i:1;a:1:{s:9:"wethaq_db";a:1:{s:5:"users";a:0:{}}}}}two_factor_check|b:1;cache|a:3:{s:8:"server_1";a:4:{s:15:"userprefs_mtime";i:1759459743;s:14:"userprefs_type";s:2:"db";s:12:"config_mtime";i:1447170388;s:9:"userprefs";a:2:{s:7:"Console";a:1:{s:4:"Mode";s:8:"collapse";}s:4:"lang";s:2:"ar";}}s:13:"server_1_root";a:10:{s:11:"binary_logs";a:0:{}s:18:"menu-levels-server";a:13:{s:9:"databases";s:23:"قاعدة بيانات";s:3:"sql";s:3:"SQL";s:6:"status";s:12:"الحالة";s:6:"rights";s:20:"المستخدمون";s:6:"export";s:10:"تصدير";s:6:"import";s:14:"استيراد";s:8:"settings";s:18:"الإعدادات";s:6:"binlog";s:17:"سجل ثنائي";s:11:"replication";s:14:"إستنساخ";s:4:"vars";s:14:"متغيرات";s:7:"charset";s:29:"مجموعات المحارف";s:7:"plugins";s:14:"القوابس";s:6:"engine";s:12:"محركات";}s:11:"dbs_to_test";b:0;s:14:"menu-levels-db";a:14:{s:9:"structure";s:8:"بناء";s:3:"sql";s:3:"SQL";s:6:"search";s:8:"إبحث";s:5:"query";s:36:"استعلام بواسطة مثال";s:6:"export";s:10:"تصدير";s:6:"import";s:14:"استيراد";s:9:"operation";s:12:"عمليات";s:10:"privileges";s:20:"الإمتيازات";s:8:"routines";s:14:"روتينات";s:6:"events";s:10:"أحداث";s:8:"triggers";s:14:"القوادح";s:8:"tracking";s:8:"تتبع";s:8:"designer";s:12:"المصمم";s:15:"central_columns";s:31:"الأعمدة المركزية";}s:19:"profiling_supported";b:1;s:17:"menu-levels-table";a:11:{s:6:"browse";s:14:"استعراض";s:9:"structure";s:8:"بناء";s:3:"sql";s:3:"SQL";s:6:"search";s:8:"إبحث";s:6:"insert";s:10:"إدخال";s:6:"export";s:10:"تصدير";s:6:"import";s:14:"استيراد";s:10:"privileges";s:20:"الإمتيازات";s:9:"operation";s:12:"عمليات";s:8:"tracking";s:8:"تتبع";s:8:"triggers";s:14:"القوادح";}s:14:"mysql_cur_user";s:1:"@";s:12:"is_superuser";b:1;s:12:"is_grantuser";b:0;s:13:"is_createuser";b:0;}s:13:"version_check";a:2:{s:8:"response";s:411:"{
+    "version": "5.2.2",
+    "date": "2025-01-21",
+    "releases": [
+        {
+            "version": "5.2.2",
+            "date": "2025-01-21",
+            "php_versions": ">=7.2,<8.4",
+            "mysql_versions": ">=5.5"
+        },
+        {
+            "version": "4.9.11",
+            "date": "2023-02-08",
+            "php_versions": ">=5.5,<8.0",
+            "mysql_versions": ">=5.5"
+        }
+    ]
+}";s:9:"timestamp";i:1759459743;}}git_location|N;is_git_revision|b:0;ConfigFile1|a:2:{s:7:"Console";a:1:{s:4:"Mode";s:8:"collapse";}s:7:"Servers";a:1:{i:1;a:2:{s:7:"only_db";s:0:"";s:7:"hide_db";s:0:"";}}}debug|a:0:{}flashMessages|a:0:{}Import_message|a:2:{s:7:"message";N;s:11:"go_back_url";s:48:"index.php?route=/database/structure&db=wethaq_db";}is_multi_query|b:1;sql_history|a:7:{i:0;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:0:"";s:8:"sqlquery";s:232:"-- تأكيد
+SELECT
+  (SELECT COUNT(*) FROM users WHERE role='Staff')   AS staff_count,
+  (SELECT COUNT(*) FROM users WHERE role='Parent')  AS parent_count,
+  (SELECT COUNT(*) FROM children)                   AS children_count;";}i:1;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:5:"users";s:8:"sqlquery";s:21:"SELECT * FROM `users`";}i:2;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:5:"users";s:8:"sqlquery";s:21:"SELECT * FROM `users`";}i:3;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:0:"";s:8:"sqlquery";s:232:"-- تأكيد
+SELECT
+  (SELECT COUNT(*) FROM users WHERE role='Staff')   AS staff_count,
+  (SELECT COUNT(*) FROM users WHERE role='Parent')  AS parent_count,
+  (SELECT COUNT(*) FROM children)                   AS children_count;";}i:4;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:0:"";s:8:"sqlquery";s:180:"-- طفل تجريبي لولي الأمر
+INSERT INTO children (parent_user_id, child_name, class)
+SELECT id, 'Child A', '1A' FROM users WHERE email='parent@wethaq.com' LIMIT 1;";}i:5;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:5:"users";s:8:"sqlquery";s:21:"SELECT * FROM `users`";}i:6;a:3:{s:2:"db";s:9:"wethaq_db";s:5:"table";s:0:"";s:8:"sqlquery";s:160:"-- طفل تجريبي
+INSERT INTO children (parent_user_id, child_name, class)
+SELECT id, 'Child A', '1A' FROM users WHERE email='parent@wethaq.com' LIMIT 1;";}}sql_from_query_box|b:1;errors|a:0:{}

@@ -1,36 +1,35 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'staff_dashboard.dart';
 
-import 'reset_password_screen.dart';
 import 'admin_dashboard.dart';
+import 'staff_dashboard.dart';
+import 'parent_dashboard.dart';
+
+// على المحاكي Android استخدمي 10.0.2.2، وعلى جهاز حقيقي بدّليها بـ IP جهازك (مثال 192.168.1.28)
+const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class LoginScreen extends StatefulWidget {
-  final String role;
-  const LoginScreen({required this.role, super.key});
+  final String role; // 'Admin' | 'Staff' | 'Parent' (من شاشة اختيار الدور)
+  const LoginScreen({super.key, required this.role});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-const String baseUrl = 'http://192.168.1.28/wethaq';
-
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final usernameController = TextEditingController();
-  final passwordController = TextEditingController();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  bool _obscure = true;
 
-  bool isLoading = false;
-  bool _obscurePassword = true;
-
-  // الألوان
+  // ألوان واجهة تسجيل الدخول (مطابقة لتصميمك)
   static const Color kPanelGreen = Color(0xFF5E8B62);
   static const Color kFieldFill = Color(0xFFA3B8A6);
   static const Color kBtnFill = Color(0xFFE4EFE7);
   static const Color kForgot = Color(0xFFCC8F93);
 
-  // أنيميشن البانل
   late final AnimationController _panelCtrl;
   late final Animation<Offset> _slideUp;
   late final Animation<double> _fadeIn;
@@ -40,83 +39,88 @@ class _LoginScreenState extends State<LoginScreen>
     super.initState();
     _panelCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 900),
     );
-    _slideUp = Tween<Offset>(
-      begin: const Offset(0, 0.20),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _panelCtrl,
-      curve: Curves.easeOutCubic,
-    ));
-    _fadeIn = CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOut);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _panelCtrl.forward();
-    });
+    _slideUp = Tween(begin: const Offset(0, .20), end: Offset.zero).animate(
+        CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutCubic));
+    _fadeIn = CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutCubic);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _panelCtrl.forward());
   }
 
   @override
   void dispose() {
-    usernameController.dispose();
-    passwordController.dispose();
+    _username.dispose();
+    _password.dispose();
     _panelCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> loginUser() async {
-    setState(() => isLoading = true);
+  Future<void> _login() async {
+    if (_busy) return;
+    final u = _username.text.trim();
+    final p = _password.text.trim();
+    if (u.isEmpty || p.isEmpty) {
+      _snack('Please enter username and password');
+      return;
+    }
+
+    setState(() => _busy = true);
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/login.php'),
-        body: {
-          'username': usernameController.text.trim(),
-          'password': passwordController.text.trim(),
-        },
+        body: {'username': u, 'password': p},
       );
+      if (res.statusCode != 200) {
+        _snack('Server error: ${res.statusCode}');
+        return;
+      }
+      final data = jsonDecode(res.body);
+      if (data is! Map || data['status'] != 'success') {
+        _snack('${data['message'] ?? 'Login failed'}');
+        return;
+      }
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data['status'] == 'success') {
-          final user = data['user'];
-          final role = user['role'];
+      final user = data['user'] as Map;
+      final role = (user['role'] ?? '').toString();
 
-          if (role == 'Admin') {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const AdminDashboard()));
-          } else if (role == 'Staff') {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => StaffDashboard(
-                  staffUserId: int.parse(user['id'].toString()),
-                  staffName: user['name'] ?? '',
-                  staffEmail: user['email'] ?? '',
-                ),
-              ),
-            );
-          } else if (role == 'Parent') {
-            // TODO: هنا تضيف شاشة الآباء لما تجهزها
-            _snack('Parent login not implemented yet');
-          } else {
-            _snack('Unknown role: $role');
-          }
-        } else {
-          _snack(data['message']);
-        }
+      // لو اخترتِ "Parent" من شاشة الدور لكنه دخل بحساب Staff مثلاً، نمشي حسب ما يرجع السيرفر.
+      if (role == 'Admin') {
+        Navigator.push(
+            context, MaterialPageRoute(builder: (_) => const AdminDashboard()));
+      } else if (role == 'Staff') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => StaffDashboard(
+              staffUserId: int.parse(user['id'].toString()),
+              staffName: user['name'] ?? '',
+              staffEmail: user['email'] ?? '',
+            ),
+          ),
+        );
+      } else if (role == 'Parent') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ParentDashboard(
+              parentUserId: int.parse(user['id'].toString()),
+              parentName: user['name'] ?? '',
+              parentEmail: user['email'] ?? '',
+            ),
+          ),
+        );
       } else {
-        _snack("Server error: ${res.statusCode}");
+        _snack('Unknown role: $role');
       }
     } catch (e) {
-      _snack("Error: $e");
+      _snack('Error: $e');
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
+  void _snack(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   @override
   Widget build(BuildContext context) {
@@ -138,15 +142,11 @@ class _LoginScreenState extends State<LoginScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Wethaq',
-                  style: TextStyle(
-                    fontFamily: 'serif',
-                    fontSize: 42,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
+                const Text('Wethaq',
+                    style: TextStyle(
+                        fontFamily: 'serif',
+                        fontSize: 42,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text(
                   'Welcome ${widget.role}',
@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
 
-          // الفورم
+          // البانل
           Expanded(
             flex: 7,
             child: SlideTransition(
@@ -177,7 +177,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                   ),
                   child: LayoutBuilder(
-                    builder: (context, constraints) {
+                    builder: (context, c) {
                       return SingleChildScrollView(
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
@@ -185,9 +185,8 @@ class _LoginScreenState extends State<LoginScreen>
                             EdgeInsets.fromLTRB(28, 32, 28, 24 + bottomInset),
                         child: ConstrainedBox(
                           constraints: BoxConstraints(
-                            minHeight: bottomInset == 0
-                                ? constraints.maxHeight - (32 + 24)
-                                : 0,
+                            minHeight:
+                                bottomInset == 0 ? c.maxHeight - (32 + 24) : 0,
                           ),
                           child: Column(
                             mainAxisAlignment: bottomInset == 0
@@ -195,15 +194,14 @@ class _LoginScreenState extends State<LoginScreen>
                                 : MainAxisAlignment.start,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'User name',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 14),
-                              ),
+                              const Text('User name',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 14)),
                               const SizedBox(height: 6),
                               TextField(
-                                controller: usernameController,
+                                controller: _username,
                                 keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
                                 decoration: const InputDecoration(
                                   prefixIcon:
                                       Icon(Icons.person, color: Colors.white70),
@@ -215,30 +213,28 @@ class _LoginScreenState extends State<LoginScreen>
                                     borderSide: BorderSide.none,
                                   ),
                                 ),
-                                style: const TextStyle(color: Colors.black),
                               ),
                               const SizedBox(height: 20),
-                              const Text(
-                                'Password',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 14),
-                              ),
+                              const Text('Password',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 14)),
                               const SizedBox(height: 6),
                               TextField(
-                                controller: passwordController,
-                                obscureText: _obscurePassword,
+                                controller: _password,
+                                obscureText: _obscure,
+                                onSubmitted: (_) => _login(),
                                 decoration: InputDecoration(
                                   prefixIcon: const Icon(Icons.lock,
                                       color: Colors.white70),
                                   suffixIcon: IconButton(
                                     icon: Icon(
-                                      _obscurePassword
+                                      _obscure
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                       color: Colors.grey[800],
                                     ),
-                                    onPressed: () => setState(() =>
-                                        _obscurePassword = !_obscurePassword),
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
                                   ),
                                   filled: true,
                                   fillColor: kFieldFill,
@@ -248,7 +244,6 @@ class _LoginScreenState extends State<LoginScreen>
                                     borderSide: BorderSide.none,
                                   ),
                                 ),
-                                style: const TextStyle(color: Colors.black),
                               ),
                               const SizedBox(height: 28),
                               Center(
@@ -256,47 +251,32 @@ class _LoginScreenState extends State<LoginScreen>
                                   width: 140,
                                   height: 42,
                                   child: ElevatedButton(
-                                    onPressed: isLoading ? null : loginUser,
+                                    onPressed: _busy ? null : _login,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: kBtnFill,
-                                      shape: const StadiumBorder(),
-                                      elevation: 0,
-                                    ),
-                                    child: isLoading
+                                        backgroundColor: kBtnFill,
+                                        shape: const StadiumBorder(),
+                                        elevation: 0),
+                                    child: _busy
                                         ? const SizedBox(
                                             width: 20,
                                             height: 20,
                                             child: CircularProgressIndicator(
                                                 strokeWidth: 2),
                                           )
-                                        : const Text(
-                                            'Log in',
+                                        : const Text('Log in',
                                             style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              color: kPanelGreen,
-                                            ),
-                                          ),
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: kPanelGreen)),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 28),
                               Center(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const ResetPasswordScreen(),
-                                      ),
-                                    );
-                                  },
-                                  child: const Text(
-                                    'Forgot your password?',
-                                    style:
-                                        TextStyle(fontSize: 15, color: kForgot),
-                                  ),
+                                child: Text(
+                                  'Forgot your password?',
+                                  style: const TextStyle(
+                                      fontSize: 15, color: kForgot),
                                 ),
                               ),
                             ],

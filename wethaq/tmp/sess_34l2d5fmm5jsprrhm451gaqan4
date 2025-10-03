@@ -1,0 +1,4 @@
+ PMA_token |s:32:"3263492425786360453c5d3a2f265f2a"; HMAC_secret |s:16:"$Gyxi7H0fVK\!=8C";browser_access_time|a:1:{s:7:"default";i:1759463863;}Import_message|a:1:{s:7:"message";s:444:"<div class="alert alert-danger" role="alert"><h1>خطأ</h1><p>
+    <strong>MySQL قال: </strong><a href="./url.php?url=https%3A%2F%2Fdev.mysql.com%2Fdoc%2Frefman%2F5.7%2Fen%2Fserver-error-reference.html" target="mysql_doc"><img src="themes/dot.gif" title="مستندات وثائقية" alt="مستندات وثائقية" class="icon ic_b_help"></a>
+</p>
+<code>لايمكن الإتصال: إعدادات غير صحيحة.</code><br></div>";}errors|a:0:{}

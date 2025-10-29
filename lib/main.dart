@@ -1,7 +1,63 @@
 import 'package:flutter/material.dart';
-import 'login_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-void main() {
+import 'firebase_options.dart'; // من FlutterFire CLI
+import 'notification_service.dart'; // فيه initLocalNotifications و initFCM
+import 'login_screen.dart'; // شاشة تسجيل الدخول والأدوار
+
+// مفتاح ناڤيجيتور عام عشان نقدر نفتح شاشات عند الضغط على الإشعار
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// الدالة الموحدة للتعامل مع ضغط الإشعارات (foreground/background/terminated)
+void handleNotificationTap(Map<String, dynamic> data) {
+  final type = (data['type'] ?? '').toString();
+  // تلميحات: لو تبين تربطيه الآن فعليًا، افتحي الشاشات حسب النوع:
+  // switch (type) {
+  //   case 'attendance':
+  //   case 'dismissal':
+  //     navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ChildAttendanceScreen(...)));
+  //     break;
+  //   case 'schedule':
+  //     navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ScheduleScreen(...)));
+  //     break;
+  //   case 'announcement':
+  //     navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => AnnouncementsScreen(...)));
+  //     break;
+  //   case 'chat':
+  //     navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ChatScreen(...)));
+  //     break;
+  //   default:
+  //     // لا شيء
+  // }
+  // مؤقتًا نطبع بس للتاكيد
+  // تجاهلي الطباعة لو ما تحتاجينها
+  // debugPrint('🔔 notification tap -> type=$type | data=$data');
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 1) تهيئة Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // 2) الإشعارات المحلية و FCM (طلب الصلاحية + تفعيل القناة + عرض foreground)
+  await initLocalNotifications();
+  await initFCM();
+
+  // 3) لو المستخدم ضغط إشعار والتطبيق كان "مقفّل" (terminated)
+  final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
+  if (initialMsg != null) {
+    handleNotificationTap(initialMsg.data);
+  }
+
+  // 4) لو ضغط إشعار والتطبيق بالخلفية
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage msg) {
+    handleNotificationTap(msg.data);
+  });
+
   runApp(const WethaqApp());
 }
 
@@ -11,6 +67,8 @@ class WethaqApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey:
+          navigatorKey, // مهم لفتح الشاشات من خارج السياق (notification)
       debugShowCheckedModeBanner: false,
       title: 'Wethaq',
       theme: ThemeData(
@@ -38,8 +96,8 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
+  late final AnimationController _controller;
+  late final Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -55,6 +113,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(seconds: 1), () {
       _controller.forward().whenComplete(() {
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const WelcomeScreen()),
@@ -91,7 +150,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-/// Welcome Screen
+/// Welcome Screen (اختيار الدور)
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
@@ -111,12 +170,8 @@ class WelcomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Bigger logo
-            Image.asset(
-              'assets/images/wethaq_logo.png',
-              width: 250,
-              height: 250,
-            ),
+            Image.asset('assets/images/wethaq_logo.png',
+                width: 250, height: 250),
             const SizedBox(height: 22),
             const Text(
               'Wethaq System',
@@ -136,42 +191,34 @@ class WelcomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Role Buttons
             _RoleCard(
               icon: Icons.family_restroom,
               label: 'Parent',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoginScreen(role: 'Parent')),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const LoginScreen(role: 'Parent')),
+              ),
             ),
             const SizedBox(height: 16),
             _RoleCard(
               icon: Icons.groups_2,
-              label: 'Members',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoginScreen(role: 'Members')),
-                );
-              },
+              label: 'Staff',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const LoginScreen(role: 'Staff')),
+              ),
             ),
             const SizedBox(height: 16),
             _RoleCard(
               icon: Icons.admin_panel_settings,
               label: 'Admin',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoginScreen(role: 'Admin')),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const LoginScreen(role: 'Admin')),
+              ),
             ),
           ],
         ),
@@ -180,7 +227,6 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-/// New styled role button
 class _RoleCard extends StatelessWidget {
   final IconData icon;
   final String label;

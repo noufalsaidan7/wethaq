@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "979566029457",
+    "project_id": "wethaq-270ec",
+    "storage_bucket": "wethaq-270ec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979566029457:android:4413466662afb7bb442d30",
+        "android_client_info": {
+          "package_name": "com.example.myapplication"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByWLRahAWku-680Qak3K2a54-ss8_nQlE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979566029457:android:ea0f5e02f4f46f55442d30",
+        "android_client_info": {
+          "package_name": "com.example.wethaq"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByWLRahAWku-680Qak3K2a54-ss8_nQlE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:979566029457:android:a116b11e31814ebe442d30",
+        "android_client_info": {
+          "package_name": "io.flutter.examples.layers"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByWLRahAWku-680Qak3K2a54-ss8_nQlE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

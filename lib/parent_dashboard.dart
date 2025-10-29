@@ -1,9 +1,15 @@
+// نفس الملف الذي أرسلتُه لك آخر مرة، مع تمرير isStaffView:false عند فتح شاشة الحضور
+// --- ابدأي من هنا واستبدلي الملف كله ---
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-// استخدمي نفس العنوان اللي عندك
-//const String baseUrl = 'http://192.168.1.28/wethaq';
+import 'child_attendance_screen.dart';
+import 'chat_screen.dart';
+
+//const String baseUrl = 'http://192.168.1.28:8080/wethaq';
+
 const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class ParentDashboard extends StatefulWidget {
@@ -12,80 +18,108 @@ class ParentDashboard extends StatefulWidget {
   final String parentEmail;
 
   const ParentDashboard({
-    super.key,
+    Key? key,
     required this.parentUserId,
     required this.parentName,
     required this.parentEmail,
-  });
+  }) : super(key: key);
 
   @override
   State<ParentDashboard> createState() => _ParentDashboardState();
 }
 
 class _ParentDashboardState extends State<ParentDashboard> {
-  // نفس ألوان ستايلك الحالي
   static const kGreen = Color(0xFF507C5C);
   static const kPanel = Color(0xFFE6F0EA);
 
   int _tab = 0;
 
-  // ===== Children =====
   bool _loadingChildren = false;
-  List<Map<String, dynamic>> children = [];
+  List<Map<String, dynamic>> _children = [];
 
-  // ===== Announcements (قراءة فقط) =====
+  bool _loadingAssigned = false;
+  int? _assignedStaffUserId;
+  String _assignedStaffName = '';
+
   bool _loadingAnns = false;
-  List<Map<String, dynamic>> anns = [];
+  List<Map<String, dynamic>> _anns = [];
 
-  // ===== تغيير كلمة المرور =====
   final TextEditingController _newPass = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchChildren();
-    _fetchAnnouncements(); // يعرض العام/الموجّه للأب إن كان مدعوم في PHP
+    _fetchAnnouncements();
+    _fetchAssignedStaffForThisParent();
   }
-
-  // ----------------- API -----------------
 
   Future<void> _fetchChildren() async {
     setState(() => _loadingChildren = true);
     try {
-      // نجيب أطفال هذا الأب فقط
       final uri = Uri.parse(
-        '$baseUrl/list_children.php?parent_user_id=${widget.parentUserId}',
-      );
+          '$baseUrl/list_children.php?parent_user_id=${widget.parentUserId}');
       final res = await http.get(uri).timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map && data['status'] == 'success') {
           final items = (data['items'] as List?) ?? const [];
-          setState(() => children = items.cast<Map<String, dynamic>>());
+          _children = items.map((e) => Map<String, dynamic>.from(e)).toList();
         }
       }
     } catch (_) {}
-    if (mounted) setState(() => _loadingChildren = false);
+    if (!mounted) return;
+    setState(() => _loadingChildren = false);
+  }
+
+  Future<void> _fetchAssignedStaffForThisParent() async {
+    setState(() => _loadingAssigned = true);
+    try {
+      final uri = Uri.parse('$baseUrl/list_parents.php');
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map && data['status'] == 'success') {
+          final items = (data['items'] as List?) ?? const [];
+          for (final raw in items) {
+            final m = Map<String, dynamic>.from(raw);
+            final pid = int.tryParse('${m['id']}') ?? -1;
+            if (pid == widget.parentUserId) {
+              _assignedStaffUserId =
+                  int.tryParse('${m['staff_user_id'] ?? '0'}') ?? 0;
+              _assignedStaffName = (m['staff_name'] ?? '').toString();
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _loadingAssigned = false);
   }
 
   Future<void> _fetchAnnouncements() async {
     setState(() => _loadingAnns = true);
     try {
-      // الأفضل أن يكون لديك في الـ PHP فلترة حسب parent_user_id
-      // إن لم تكن موجودة، سيجلب العامة على الأقل
       final uri = Uri.parse(
-        '$baseUrl/list_announcements.php?parent_user_id=${widget.parentUserId}',
-      );
+          '$baseUrl/list_announcements.php?parent_user_id=${widget.parentUserId}');
       final res = await http.get(uri).timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map && data['status'] == 'success') {
           final items = (data['items'] as List?) ?? const [];
-          setState(() => anns = items.cast<Map<String, dynamic>>());
+          _anns = items.map((e) => Map<String, dynamic>.from(e)).toList();
+        } else {
+          _anns = [];
         }
+      } else {
+        _anns = [];
       }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingAnns = false);
+    } catch (_) {
+      _anns = [];
+    }
+    if (!mounted) return;
+    setState(() => _loadingAnns = false);
   }
 
   Future<void> _changePasswordDialog() async {
@@ -101,9 +135,8 @@ class _ParentDashboardState extends State<ParentDashboard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: kGreen,
@@ -117,24 +150,17 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   'new_password': _newPass.text.trim(),
                 },
               );
+              if (!mounted) return;
               if (res.statusCode == 200) {
                 final j = jsonDecode(res.body);
                 if (j is Map && j['status'] == 'success') {
-                  if (mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password changed')),
-                    );
-                  }
+                  Navigator.pop(context);
+                  _snack('Password changed');
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        (j is Map ? j['message'] : 'Error').toString(),
-                      ),
-                    ),
-                  );
+                  _snack((j is Map ? j['message'] : 'Error').toString());
                 }
+              } else {
+                _snack('Server: ${res.statusCode}');
               }
             },
             child: const Text('Save'),
@@ -152,14 +178,11 @@ class _ParentDashboardState extends State<ParentDashboard> {
             content: const Text('Are you sure you want to log out?'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                ),
+                    backgroundColor: Colors.red, foregroundColor: Colors.white),
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('Log out'),
               ),
@@ -167,11 +190,11 @@ class _ParentDashboardState extends State<ParentDashboard> {
           ),
         ) ??
         false;
-
     if (ok && mounted) Navigator.pop(context);
   }
 
-  // ----------------- UI -----------------
+  void _snack(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +258,10 @@ class _ParentDashboardState extends State<ParentDashboard> {
         unselectedItemColor: Colors.grey,
         onTap: (i) {
           setState(() => _tab = i);
-          if (i == 0) _fetchChildren();
+          if (i == 0) {
+            _fetchChildren();
+            _fetchAssignedStaffForThisParent();
+          }
           if (i == 1) _fetchAnnouncements();
         },
         items: const [
@@ -249,36 +275,111 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
-  // ===== Tab 0: Children =====
   Widget _buildChildrenTab() {
     return RefreshIndicator(
-      onRefresh: _fetchChildren,
+      onRefresh: () async {
+        await _fetchChildren();
+        await _fetchAssignedStaffForThisParent();
+      },
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_loadingChildren) const LinearProgressIndicator(minHeight: 2),
+          if (_loadingChildren || _loadingAssigned)
+            const LinearProgressIndicator(minHeight: 2),
           const SizedBox(height: 8),
-          if (children.isEmpty && !_loadingChildren)
+          if (_children.isEmpty && !_loadingChildren && !_loadingAssigned) ...[
             _empty('No children yet', 'Your children will appear here.'),
-          ...children.map(
-            (c) => Card(
-              color: kPanel,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.school, color: kGreen),
-                title: Text(c['child_name']?.toString() ?? '-'),
-                subtitle: Text('Class: ${c['class']?.toString() ?? '-'}'),
-              ),
-            ),
-          ),
+          ] else
+            ..._children.map((c) {
+              final childId = c['id'] ?? c['child_id'] ?? 0;
+              final childName =
+                  (c['child_name'] ?? c['name'] ?? '-').toString();
+              final klass = (c['class'] ?? c['class_name'] ?? '-').toString();
+              final staffId = _assignedStaffUserId ?? 0;
+              final staffName = _assignedStaffName;
+
+              return Card(
+                color: kPanel,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: const Icon(Icons.school, color: kGreen),
+                  title: Text(childName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('Class: $klass',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: Wrap(
+                    spacing: 6,
+                    children: [
+                      IconButton(
+                        tooltip: 'Open chat',
+                        icon: const Icon(Icons.chat_bubble_outline,
+                            color: kGreen),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                role: 'Parent',
+                                staffUserId: staffId,
+                                parentUserId: widget.parentUserId,
+                                childId: childId,
+                                peerName:
+                                    staffName.isEmpty ? 'Teacher' : staffName,
+                                childName: childName,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Attendance',
+                        icon: const Icon(Icons.calendar_month,
+                            color: Colors.black87),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChildAttendanceScreen(
+                                childId: childId,
+                                childName: childName,
+                                staffName:
+                                    staffName.isEmpty ? 'Teacher' : staffName,
+                                parentUserId: widget.parentUserId,
+                                staffUserId: staffId,
+                                isStaffView: false, // <<< Parent view
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChildAttendanceScreen(
+                          childId: childId,
+                          childName: childName,
+                          staffName: staffName.isEmpty ? 'Teacher' : staffName,
+                          parentUserId: widget.parentUserId,
+                          staffUserId: staffId,
+                          isStaffView: false, // <<< Parent view
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }).toList(),
         ],
       ),
     );
   }
 
-  // ===== Tab 1: Announcements (read-only) =====
   Widget _buildAnnouncementsTab() {
     return RefreshIndicator(
       onRefresh: _fetchAnnouncements,
@@ -287,10 +388,10 @@ class _ParentDashboardState extends State<ParentDashboard> {
         children: [
           if (_loadingAnns) const LinearProgressIndicator(minHeight: 2),
           const SizedBox(height: 8),
-          if (anns.isEmpty && !_loadingAnns)
+          if (_anns.isEmpty && !_loadingAnns)
             _empty('No announcements',
                 'Announcements addressed to you appear here.'),
-          ...anns.map(
+          ..._anns.map(
             (a) => Card(
               color: kPanel,
               shape: RoundedRectangleBorder(
@@ -311,7 +412,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
-  // ===== Tab 2: Profile =====
   Widget _buildProfileTab() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -351,7 +451,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
-  // ===== Helpers =====
   Widget _empty(String t, String s) => Column(
         children: [
           const SizedBox(height: 64),

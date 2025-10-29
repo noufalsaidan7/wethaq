@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-// const String baseUrl = 'http://192.168.1.28/wethaq';
+//const String baseUrl = 'http://192.168.1.28:8080/wethaq';
+
 const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class AdminDashboard extends StatefulWidget {
@@ -502,7 +503,7 @@ class _AdminDashboardState extends State<AdminDashboard>
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // زر الإضافة (كان السبب أنه ما يظهر من قبل)
+            // زر الإضافة
             ElevatedButton.icon(
               onPressed: _openAddChildSheet,
               icon: const Icon(Icons.add),
@@ -799,19 +800,22 @@ class _AdminDashboardState extends State<AdminDashboard>
       useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
         final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
         final safeBottom = MediaQuery.of(ctx).padding.bottom;
+
         return StatefulBuilder(
           builder: (ctx, setM) => SafeArea(
             top: false,
             child: Padding(
               padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 20,
-                  bottom: viewInsets + safeBottom + 16),
+                left: 16,
+                right: 16,
+                top: 20,
+                bottom: viewInsets + safeBottom + 16,
+              ),
               child: SingleChildScrollView(
                 child: Form(
                   key: formKey,
@@ -839,8 +843,6 @@ class _AdminDashboardState extends State<AdminDashboard>
                         decoration:
                             const InputDecoration(labelText: 'Phone Number'),
                         keyboardType: TextInputType.number,
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -848,14 +850,13 @@ class _AdminDashboardState extends State<AdminDashboard>
                         decoration:
                             const InputDecoration(labelText: 'Employee Number'),
                         keyboardType: TextInputType.number,
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Required' : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: passCtrl,
                         decoration: const InputDecoration(
-                            labelText: 'New Password (optional)'),
+                          labelText: 'New Password (optional)',
+                        ),
                         obscureText: true,
                       ),
                       const SizedBox(height: 16),
@@ -867,9 +868,33 @@ class _AdminDashboardState extends State<AdminDashboard>
                               return;
                             }
                             Navigator.pop(ctx);
-                            // مافيه update_staff.php بهذا السنابت
-                            _snack(
-                                'Save changes not implemented for staff update in this snippet.');
+                            try {
+                              final payload = <String, String>{
+                                'user_id':
+                                    '${staff['id'] ?? staff['user_id'] ?? ''}',
+                                'name': nameCtrl.text.trim(),
+                                'email': emailCtrl.text.trim(),
+                                'phone': phoneCtrl.text.trim(),
+                                'employee_number': empCtrl.text.trim(),
+                              };
+                              if (passCtrl.text.trim().isNotEmpty) {
+                                payload['password'] = passCtrl.text.trim();
+                              }
+
+                              final result = await _postJson(
+                                '$baseUrl/update_staff.php',
+                                payload,
+                              );
+
+                              if (result['status'] == 'success') {
+                                _snack('Staff updated');
+                                await fetchStaff();
+                              } else {
+                                _snack('Server said: ${result['message']}');
+                              }
+                            } catch (e) {
+                              _snack('Server error: $e');
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: kGreen,

@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:wethaq/utils/save_token.dart';
 
 import 'admin_dashboard.dart';
 import 'staff_dashboard.dart';
 import 'parent_dashboard.dart';
+import 'package:wethaq/utils/save_token.dart';
 
-// على المحاكي Android استخدمي 10.0.2.2، وعلى جهاز حقيقي بدّليها بـ IP جهازك (مثال 192.168.1.28)
+//const String baseUrl = 'http://192.168.1.28:8080/wethaq';
+
 const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class LoginScreen extends StatefulWidget {
@@ -24,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _busy = false;
   bool _obscure = true;
 
-  // ألوان واجهة تسجيل الدخول (مطابقة لتصميمك)
+  // ألوان واجهة تسجيل الدخول
   static const Color kPanelGreen = Color(0xFF5E8B62);
   static const Color kFieldFill = Color(0xFFA3B8A6);
   static const Color kBtnFill = Color(0xFFE4EFE7);
@@ -82,8 +85,10 @@ class _LoginScreenState extends State<LoginScreen>
 
       final user = data['user'] as Map;
       final role = (user['role'] ?? '').toString();
+      // 🟢 هذا السطر الجديد لحفظ توكن الإشعارات بعد نجاح تسجيل الدخول
+      String userId = user['id'].toString();
+      await saveFcmTokenToServer(userId: userId);
 
-      // لو اخترتِ "Parent" من شاشة الدور لكنه دخل بحساب Staff مثلاً، نمشي حسب ما يرجع السيرفر.
       if (role == 'Admin') {
         Navigator.push(
             context, MaterialPageRoute(builder: (_) => const AdminDashboard()));

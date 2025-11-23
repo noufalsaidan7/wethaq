@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 Future<void> saveFcmTokenToServer({
-  required String userId, // أو email حسب نظامك
+  required String userId,
 }) async {
   final fcm = FirebaseMessaging.instance;
 

@@ -23,9 +23,7 @@ Future<void> setupLocalNotifications() async {
 
 // لازم تكون top-level (خارج أي class)
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // تقدرين تسوين معالجة خفيفة هنا
-}
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
 
 Future<void> setupFcmListeners() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -53,6 +51,6 @@ Future<void> setupFcmListeners() async {
 
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     // هنا لو ضغط المستخدم على الإشعار وافتح التطبيق
-    // روّحيه لصفحة معيّنة مثلاً
+    //  لصفحة معيّنة مثلاً
   });
 }

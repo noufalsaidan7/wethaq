@@ -98,7 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'child_id': '${widget.childId}',
         'body': text,
         'sender_role': widget.role, // للاصدار الجديد
-        'role': widget.role, // لاحتمال أن سكربت الـ PHP يستخدم هذا الاسم
+        'role': widget.role, // لاحتمال أن سكربت  PHP يستخدم هذا الاسم
         if (_replyToId != null) 'reply_to_message_id': '$_replyToId',
       };
 

@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-/// شاشة حضور/انصراف طفل واحد
+import 'attendance_log_screen.dart';
+
 class ChildAttendanceScreen extends StatefulWidget {
   final int childId;
   final String childName;
@@ -21,7 +22,7 @@ class ChildAttendanceScreen extends StatefulWidget {
     required this.staffName,
     required this.parentUserId,
     required this.staffUserId,
-    this.isStaffView = false, // الافتراضي Parent view
+    this.isStaffView = false,
   });
 
   @override
@@ -29,31 +30,28 @@ class ChildAttendanceScreen extends StatefulWidget {
 }
 
 class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
-  // غيّري الجذر لو مجلّدك مختلف
   static const String baseUrl = 'http://10.0.2.2/wethaq';
   static const Color kGreen = Color(0xFF507C5C);
 
   bool get _isStaff => widget.isStaffView;
   bool get _isParent => !widget.isStaffView;
 
-  /// الحالة تبدأ بصفر (مهم عشان الأزرار تشتغل من أول ما تفتح الصفحة)
   AttendanceState _state = AttendanceState.zero();
   bool _loadingState = false;
 
-  /// جدول الحضور/الانصراف
   final Map<String, String> _attendance = {
     'sun': '',
     'mon': '',
     'tue': '',
     'wed': '',
-    'thu': '',
+    'thu': ''
   };
   final Map<String, String> _dismissal = {
     'sun': '',
     'mon': '',
     'tue': '',
     'wed': '',
-    'thu': '',
+    'thu': ''
   };
 
   bool _loadingSchedule = false;
@@ -69,8 +67,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     await Future.wait([_loadState(), _loadSchedule()]);
   }
 
-  // -------------------- Attendance state --------------------
-
   Future<void> _loadState() async {
     setState(() => _loadingState = true);
     try {
@@ -85,6 +81,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
             _state = AttendanceState(
               morningParentDropped: _toInt(s['morning_parent_dropped']),
               morningTeacherConfirm: _toInt(s['morning_teacher_confirm']),
+              noonParentNear: _toInt(s['noon_parent_near']),
               noonParentWaiting: _toInt(s['noon_parent_waiting']),
               noonTeacherReleased: _toInt(s['noon_teacher_released']),
             );
@@ -92,7 +89,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
         }
       }
     } catch (_) {
-      // تجاهل بهدوء
     } finally {
       if (mounted) setState(() => _loadingState = false);
     }
@@ -104,18 +100,25 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     return 0;
   }
 
-  /// يرسل أحد الأحداث الأربع ويحدّث الحالة (تفاؤلي + تأكيد من السيرفر)
   Future<void> _sendAttendanceAction({required String action}) async {
-    // تحديث تفاؤلي سريع
+    // تفاؤلي
     setState(() {
-      if (action == 'parent_dropped') {
-        _state = _state.copyWith(morningParentDropped: 1);
-      } else if (action == 'staff_checked_in') {
-        _state = _state.copyWith(morningTeacherConfirm: 1);
-      } else if (action == 'parent_waiting') {
-        _state = _state.copyWith(noonParentWaiting: 1);
-      } else if (action == 'staff_checked_out') {
-        _state = _state.copyWith(noonTeacherReleased: 1);
+      switch (action) {
+        case 'parent_dropped':
+          _state = _state.copyWith(morningParentDropped: 1);
+          break;
+        case 'staff_checked_in':
+          _state = _state.copyWith(morningTeacherConfirm: 1);
+          break;
+        case 'parent_nearby':
+          _state = _state.copyWith(noonParentNear: 1);
+          break;
+        case 'parent_waiting':
+          _state = _state.copyWith(noonParentWaiting: 1);
+          break;
+        case 'staff_checked_out':
+          _state = _state.copyWith(noonTeacherReleased: 1);
+          break;
       }
     });
 
@@ -126,35 +129,33 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
         'actor_user_id':
             _isParent ? '${widget.parentUserId}' : '${widget.staffUserId}',
         'child_id': '${widget.childId}',
-        // one of: parent_dropped | staff_checked_in | parent_waiting | staff_checked_out
+        // parent_dropped | staff_checked_in | parent_nearby | parent_waiting | staff_checked_out
         'action': action,
       };
-
       final res =
           await http.post(uri, body: body).timeout(const Duration(seconds: 20));
 
       if (res.statusCode == 200) {
         final j = jsonDecode(res.body);
         if (j is Map && j['status'] == 'success') {
-          // لو السيرفر يرجّع الحالة الحالية نقرأها (يفيد لما المعلّم يرجّع للوضع الافتراضي)
           final st = Map<String, dynamic>.from(j['state'] ?? {});
           if (st.isNotEmpty) {
             setState(() {
               _state = AttendanceState(
                 morningParentDropped: _toInt(st['morning_parent_dropped']),
                 morningTeacherConfirm: _toInt(st['morning_teacher_confirm']),
+                noonParentNear: _toInt(st['noon_parent_near']),
                 noonParentWaiting: _toInt(st['noon_parent_waiting']),
                 noonTeacherReleased: _toInt(st['noon_teacher_released']),
               );
             });
           } else {
-            // وإلا نتأكد بقراءة صريحة
             await _loadState();
           }
           _snack('تم التحديث ✅');
         } else {
           _snack((j is Map ? j['message'] : 'تعذّر الإرسال').toString());
-          await _loadState(); // نرجّع الحقيقة لو صار خطأ
+          await _loadState();
         }
       } else {
         _snack('فشل الاتصال (${res.statusCode})');
@@ -165,8 +166,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       await _loadState();
     }
   }
-
-  // -------------------- Schedule (table) --------------------
 
   Future<void> _loadSchedule() async {
     setState(() => _loadingSchedule = true);
@@ -191,22 +190,19 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
         }
       }
     } catch (_) {
-      // تجاهل
     } finally {
       if (mounted) setState(() => _loadingSchedule = false);
     }
   }
 
   Future<void> _saveSchedule({required bool publish}) async {
-    if (!_isStaff) return; // الأب غير مسموح له
-
+    if (!_isStaff) return;
     setState(() => _savingSchedule = true);
     try {
       final uri = Uri.parse('$baseUrl/save_child_schedule.php');
       final body = {
         'child_id': '${widget.childId}',
         'publish': publish ? '1' : '0',
-        // إرسال جميع الأيام
         'attendance_sun': _attendance['sun'] ?? '',
         'attendance_mon': _attendance['mon'] ?? '',
         'attendance_tue': _attendance['tue'] ?? '',
@@ -218,7 +214,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
         'dismissal_wed': _dismissal['wed'] ?? '',
         'dismissal_thu': _dismissal['thu'] ?? '',
       };
-
       final res =
           await http.post(uri, body: body).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
@@ -238,8 +233,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     }
   }
 
-  // -------------------- Helpers --------------------
-
   void _snack(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
@@ -247,11 +240,9 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
   String _fmt(TimeOfDay t) =>
       '${_format2Digits(t.hour)}:${_format2Digits(t.minute)}';
 
-  Future<void> _pickTime({
-    required bool isAttendance,
-    required String dayKey,
-  }) async {
-    if (!_isStaff) return; // الأب لا يعدّل
+  Future<void> _pickTime(
+      {required bool isAttendance, required String dayKey}) async {
+    if (!_isStaff) return;
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
@@ -273,8 +264,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     }
   }
 
-  // -------------------- Permission logic --------------------
-
+  // شروط الصباح (كما كانت)
   bool get _canParentDropMorning =>
       _isParent &&
       _state.morningParentDropped == 0 &&
@@ -285,24 +275,34 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       _state.morningParentDropped == 1 &&
       _state.morningTeacherConfirm == 0;
 
-  bool get _canParentWaitNoon =>
+  // شروط العصر (الجديدة)
+  bool get _canParentNearNoon =>
       _isParent &&
+      _state.noonParentNear == 0 &&
       _state.noonParentWaiting == 0 &&
       _state.noonTeacherReleased == 0;
 
+  // "أنا خارج المدرسة" مسموح فقط بعد "أنا قريب"
+  bool get _canParentWaitNoon =>
+      _isParent &&
+      _state.noonParentNear == 1 &&
+      _state.noonParentWaiting == 0 &&
+      _state.noonTeacherReleased == 0;
+
+  // المعلّم لا يستطيع التسليم إلا عند waiting=1
   bool get _canStaffReleaseNoon =>
       _isStaff &&
       _state.noonParentWaiting == 1 &&
       _state.noonTeacherReleased == 0;
 
-  // حالات "معلّقة" لعمل زر الأب باللون الأحمر
+  // حالات لتلوين الكروت
   bool get _isMorningPending =>
       _state.morningParentDropped == 1 && _state.morningTeacherConfirm == 0;
 
+  bool get _isNoonNearOnly =>
+      _state.noonParentNear == 1 && _state.noonParentWaiting == 0;
   bool get _isNoonPending =>
       _state.noonParentWaiting == 1 && _state.noonTeacherReleased == 0;
-
-  // -------------------- UI --------------------
 
   @override
   Widget build(BuildContext context) {
@@ -311,15 +311,12 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.green.shade50,
-        title: Text(
-          widget.childName,
-          style: const TextStyle(
-              color: Colors.black87, fontWeight: FontWeight.bold),
-        ),
+        title: Text(widget.childName,
+            style: const TextStyle(
+                color: Colors.black87, fontWeight: FontWeight.bold)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
+            icon: const Icon(Icons.arrow_back, color: Colors.black87),
+            onPressed: () => Navigator.pop(context)),
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(20),
           child: Padding(
@@ -339,8 +336,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
             children: [
               if (_loadingState || _loadingSchedule)
                 const LinearProgressIndicator(minHeight: 2),
-
-              // بطاقة معلومات عامة
               Card(
                 color: Colors.green.shade50,
                 shape: RoundedRectangleBorder(
@@ -348,40 +343,53 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("المعلّم: ${widget.staffName}",
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      const Text("الصف: KG-1",
-                          style: TextStyle(color: Colors.black54)),
-                    ],
-                  ),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("المعلّم: ${widget.staffName}",
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        const Text("الصف: KG-1",
+                            style: TextStyle(color: Colors.black54)),
+                      ]),
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Morning / Afternoon
               _buildMorningSection(),
               const SizedBox(height: 12),
               _buildAfternoonSection(),
               const SizedBox(height: 18),
-
-              // جدول الحضور/الانصراف
               _buildAttendanceTable(isStaff: _isStaff),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => AttendanceLogScreen(
+                                childId: widget.childId,
+                                childName: widget.childName,
+                              )));
+                },
+                icon: const Icon(Icons.history),
+                label: const Text('سجل الحضور والانصراف'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kGreen,
+                  side: BorderSide(color: kGreen),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                ),
+              ),
               const SizedBox(height: 16),
-
-              // أزرار الجدول للمعلّم فقط
               if (_isStaff)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
+                          backgroundColor: Colors.green,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8))),
                       onPressed: _savingSchedule
                           ? null
                           : () => _saveSchedule(publish: false),
@@ -390,17 +398,15 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text("حفظ الجدول",
                               style: TextStyle(color: Colors.white)),
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black87,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
+                          backgroundColor: Colors.black87,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8))),
                       onPressed: _savingSchedule
                           ? null
                           : () => _saveSchedule(publish: true),
@@ -409,8 +415,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text("نشر للجميع",
                               style: TextStyle(color: Colors.white)),
                     ),
@@ -423,8 +428,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     );
   }
 
-  // ---------- Widgets: Morning / Afternoon ----------
-
   Widget _buildMorningSection() {
     String caption;
     if (_state.morningParentDropped == 0 && _state.morningTeacherConfirm == 0) {
@@ -435,7 +438,6 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       caption = 'الطفل داخل المدرسة الآن';
     }
 
-    // نستخدم أحمر فقط في وضع الانتظار
     final Color cardColor =
         _isMorningPending ? Colors.red.shade100 : Colors.green.shade50;
 
@@ -450,7 +452,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
             _PrimaryButton(
               label: _isMorningPending
                   ? 'تم الإنزال (بانتظار المعلّم)'
-                  : 'نزلت طفلي',
+                  : 'انزلت طفلي الى المدرسه',
               enabled: _canParentDropMorning,
               onPressed: _canParentDropMorning
                   ? () => _sendAttendanceAction(action: 'parent_dropped')
@@ -478,16 +480,22 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
 
   Widget _buildAfternoonSection() {
     String caption;
-    if (_state.noonParentWaiting == 0 && _state.noonTeacherReleased == 0) {
+    if (_state.noonParentWaiting == 0 &&
+        _state.noonTeacherReleased == 0 &&
+        _state.noonParentNear == 0) {
       caption = 'اضغط الزر المناسب للانصراف';
+    } else if (_isNoonNearOnly) {
+      caption = 'وليّ الأمر قريب من المدرسة (استعداد للاستلام)';
     } else if (_isNoonPending) {
-      caption = 'ولي الأمر بانتظار الاستلام';
+      caption = 'وليّ الأمر بانتظار الاستلام';
     } else {
       caption = 'تم تسليم الطفل لولي الأمر';
     }
 
-    final Color cardColor =
-        _isNoonPending ? Colors.red.shade100 : Colors.green.shade50;
+    // أولوية الألوان: أحمر لـ Waiting، ثم أصفر لـ Near، وإلا أخضر فاتح
+    final Color cardColor = _isNoonPending
+        ? Colors.red.shade100
+        : (_isNoonNearOnly ? Colors.amber.shade100 : Colors.green.shade50);
 
     return _ActionCard(
       title: 'Afternoon',
@@ -496,7 +504,24 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       icon: Icons.nights_stay_rounded,
       child: Column(
         children: [
-          if (_isParent)
+          if (_isParent) ...[
+            // زر جديد: أنا قريب من المدرسة (أصفر)
+            _PrimaryButton(
+              label: _state.noonParentNear == 1
+                  ? 'تم إشعار المعلّم (أنا قريب)'
+                  : 'أنا قريب من المدرسة',
+              enabled: _canParentNearNoon,
+              onPressed: _canParentNearNoon
+                  ? () => _sendAttendanceAction(action: 'parent_nearby')
+                  : null,
+              icon: Icons.directions_car_filled_rounded,
+              background: _state.noonParentNear == 1
+                  ? Colors.amber.shade400
+                  : Colors.amber.shade700,
+              foreground: Colors.black,
+            ),
+            const SizedBox(height: 10),
+            // الزر الأساسي: أنا خارج المدرسة (أحمر) — لا يعمل إلا بعد "أنا قريب"
             _PrimaryButton(
               label: _isNoonPending ? 'بانتظار التسليم' : 'أنا خارج المدرسة',
               enabled: _canParentWaitNoon,
@@ -507,6 +532,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
               background: _isNoonPending ? Colors.red.shade300 : kGreen,
               foreground: Colors.white,
             ),
+          ],
           if (_isStaff) const SizedBox(height: 10),
           if (_isStaff)
             _PrimaryButton(
@@ -524,9 +550,8 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     );
   }
 
-  /// جدول الحضور/الانصراف
   Widget _buildAttendanceTable({required bool isStaff}) {
-    final header = const TableRow(
+    const header = TableRow(
       decoration: BoxDecoration(color: Colors.white),
       children: [
         Padding(
@@ -556,9 +581,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -573,7 +596,7 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
               2: FlexColumnWidth(),
               3: FlexColumnWidth(),
               4: FlexColumnWidth(),
-              5: FlexColumnWidth(),
+              5: FlexColumnWidth()
             },
             children: [
               header,
@@ -587,26 +610,20 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     );
   }
 
-  TableRow _buildRow({
-    required String title,
-    required bool isAttendance,
-    required bool isStaff,
-  }) {
+  TableRow _buildRow(
+      {required String title,
+      required bool isAttendance,
+      required bool isStaff}) {
     final keys = ['sun', 'mon', 'tue', 'wed', 'thu'];
 
     Widget _cell(String key) {
       final value = isAttendance ? _attendance[key]! : _dismissal[key]!;
       if (!isStaff) {
-        // عرض فقط
         return Padding(
-          padding: const EdgeInsets.all(6),
-          child: Text(
-            value.isEmpty ? '-' : value,
-            textAlign: TextAlign.center,
-          ),
-        );
+            padding: const EdgeInsets.all(6),
+            child:
+                Text(value.isEmpty ? '-' : value, textAlign: TextAlign.center));
       }
-      // قابل للنقر لاختيار وقت
       return InkWell(
         onTap: () => _pickTime(isAttendance: isAttendance, dayKey: key),
         child: Container(
@@ -626,28 +643,27 @@ class _ChildAttendanceScreenState extends State<ChildAttendanceScreen> {
     return TableRow(
       children: [
         Padding(
-          padding: const EdgeInsets.all(6),
-          child: Text(title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
+            padding: const EdgeInsets.all(6),
+            child: Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600))),
         for (final k in keys) _cell(k),
       ],
     );
   }
 }
 
-// ===== Models & shared widgets =====
-
 class AttendanceState {
   final int morningParentDropped;
   final int morningTeacherConfirm;
+  final int noonParentNear;
   final int noonParentWaiting;
   final int noonTeacherReleased;
 
   AttendanceState({
     required this.morningParentDropped,
     required this.morningTeacherConfirm,
+    required this.noonParentNear,
     required this.noonParentWaiting,
     required this.noonTeacherReleased,
   });
@@ -655,6 +671,7 @@ class AttendanceState {
   factory AttendanceState.zero() => AttendanceState(
         morningParentDropped: 0,
         morningTeacherConfirm: 0,
+        noonParentNear: 0,
         noonParentWaiting: 0,
         noonTeacherReleased: 0,
       );
@@ -662,6 +679,7 @@ class AttendanceState {
   AttendanceState copyWith({
     int? morningParentDropped,
     int? morningTeacherConfirm,
+    int? noonParentNear,
     int? noonParentWaiting,
     int? noonTeacherReleased,
   }) {
@@ -669,6 +687,7 @@ class AttendanceState {
       morningParentDropped: morningParentDropped ?? this.morningParentDropped,
       morningTeacherConfirm:
           morningTeacherConfirm ?? this.morningTeacherConfirm,
+      noonParentNear: noonParentNear ?? this.noonParentNear,
       noonParentWaiting: noonParentWaiting ?? this.noonParentWaiting,
       noonTeacherReleased: noonTeacherReleased ?? this.noonTeacherReleased,
     );
@@ -701,24 +720,17 @@ class _ActionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: Colors.black54),
-                const SizedBox(width: 8),
-                Text(
-                  title,
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, color: Colors.black54),
+              const SizedBox(width: 8),
+              Text(title,
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+            ]),
             const SizedBox(height: 8),
-            Text(
-              caption,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.black54),
-            ),
+            Text(caption,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.black54)),
             const SizedBox(height: 12),
             child,
           ],
@@ -748,11 +760,14 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final child = Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 6)],
+      Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+    ]);
+
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton.icon(
-        icon: icon != null ? Icon(icon, size: 18) : const SizedBox.shrink(),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      child: ElevatedButton(
         onPressed: enabled ? onPressed : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: background,
@@ -760,10 +775,10 @@ class _PrimaryButton extends StatelessWidget {
           disabledBackgroundColor: Colors.grey.shade300,
           disabledForegroundColor: Colors.grey.shade600,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
+        child: child,
       ),
     );
   }

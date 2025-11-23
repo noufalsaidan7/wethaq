@@ -1,6 +1,3 @@
-// نفس الملف الذي أرسلتُه لك آخر مرة، مع تمرير isStaffView:false عند فتح شاشة الحضور
-// --- ابدأي من هنا واستبدلي الملف كله ---
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -8,8 +5,12 @@ import 'package:http/http.dart' as http;
 import 'child_attendance_screen.dart';
 import 'chat_screen.dart';
 
-//const String baseUrl = 'http://192.168.1.28:8080/wethaq';
+//  إضافات الواجهات المساعدة
+import 'widgets/validators.dart';
+import 'widgets/nice_dialogs.dart';
+import 'widgets/password_checklist.dart';
 
+// const String baseUrl = 'http://192.168.1.28:8080/wethaq';
 const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class ParentDashboard extends StatefulWidget {
@@ -122,51 +123,93 @@ class _ParentDashboardState extends State<ParentDashboard> {
     setState(() => _loadingAnns = false);
   }
 
+  /// حوار تغيير كلمة المرور (Checklist + تعطيل زر الحفظ حتى تتحقق الشروط)
   Future<void> _changePasswordDialog() async {
     _newPass.clear();
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Change password'),
-        content: TextField(
-          controller: _newPass,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: 'New password'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              final res = await http.post(
-                Uri.parse('$baseUrl/change_password.php'),
-                body: {
-                  'user_id': '${widget.parentUserId}',
-                  'new_password': _newPass.text.trim(),
-                },
-              );
-              if (!mounted) return;
-              if (res.statusCode == 200) {
-                final j = jsonDecode(res.body);
-                if (j is Map && j['status'] == 'success') {
-                  Navigator.pop(context);
-                  _snack('Password changed');
-                } else {
-                  _snack((j is Map ? j['message'] : 'Error').toString());
-                }
-              } else {
-                _snack('Server: ${res.statusCode}');
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setM) {
+            final pass = _newPass.text.trim();
+            final isStrong = isPasswordStrong(pass); // من validators.dart
+
+            return AlertDialog(
+              title: const Text('Change password'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _newPass,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'New password',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setM(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    PasswordChecklist(password: pass), // UI  للشروط
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isStrong
+                      ? () async {
+                          //  API لتغيير كلمة المرور
+                          final res = await http.post(
+                            Uri.parse('$baseUrl/change_password.php'),
+                            body: {
+                              'user_id': '${widget.parentUserId}',
+                              'new_password': pass,
+                            },
+                          );
+
+                          Map<String, dynamic>? j;
+                          try {
+                            j = jsonDecode(res.body);
+                          } catch (_) {}
+
+                          if (res.statusCode == 200 &&
+                              j != null &&
+                              j['status'] == 'success') {
+                            if (!mounted) return;
+                            Navigator.pop(ctx);
+                            await showNiceSuccessDialog(
+                              context,
+                              title: 'Password updated',
+                              message:
+                                  'Your password has been changed successfully.',
+                            );
+                          } else {
+                            final msg = j?['message']?.toString() ??
+                                'Failed to change password. Please try again.';
+                            await showNiceErrorDialog(
+                              context,
+                              title: 'Couldn\'t update',
+                              message: msg,
+                            );
+                          }
+                        }
+                      : null, // يتعطل إذا الشروط ما اكتملت
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -304,12 +347,17 @@ class _ParentDashboardState extends State<ParentDashboard> {
                     borderRadius: BorderRadius.circular(12)),
                 child: ListTile(
                   leading: const Icon(Icons.school, color: kGreen),
-                  title: Text(childName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('Class: $klass',
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    childName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    'Class: $klass',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   trailing: Wrap(
                     spacing: 6,
                     children: [

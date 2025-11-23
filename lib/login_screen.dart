@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen>
 
       final user = data['user'] as Map;
       final role = (user['role'] ?? '').toString();
-      // 🟢 هذا السطر الجديد لحفظ توكن الإشعارات بعد نجاح تسجيل الدخول
+      // 🟢    لحفظ توكن الإشعارات بعد نجاح تسجيل الدخول
       String userId = user['id'].toString();
       await saveFcmTokenToServer(userId: userId);
 

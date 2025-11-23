@@ -1105,7 +1105,9 @@ class _AdminDashboardState extends State<AdminDashboard>
         TextEditingController(text: '${parent['identity_number'] ?? ''}');
     final passCtrl = TextEditingController();
 
-    String? selectedStaffId = parent['assigned_staff_user_id']?.toString();
+    String? selectedStaffId =
+        (parent['staff_user_id'] ?? parent['assigned_staff_user_id'])
+            ?.toString();
     if (selectedStaffId != null &&
         !staffList.any((s) => '${s['id']}' == selectedStaffId)) {
       selectedStaffId = null;
@@ -1500,12 +1502,52 @@ class _AdminDashboardState extends State<AdminDashboard>
   }
 
   // ===== utils =====
-  String _generatePassword([int length = 8]) {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  String _generatePassword([int length = 10]) {
+    // لازم يكون الطول كافي للأجزاء المطلوبة
+    if (length < 8) length = 8;
+
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const digits = '0123456789';
+    const symbols = r'!@#$%^&*()_-+=<>?{}~';
+
     final rnd = Random.secure();
-    return String.fromCharCodes(Iterable.generate(
-        length, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+    final buf = <String>[];
+
+    // 4 أحرف على الأقل (نمزج كبار/صغار)
+    for (int i = 0; i < 2; i++) {
+      buf.add(upper[rnd.nextInt(upper.length)]);
+      buf.add(lower[rnd.nextInt(lower.length)]);
+    }
+
+    // 3 أرقام
+    for (int i = 0; i < 3; i++) {
+      buf.add(digits[rnd.nextInt(digits.length)]);
+    }
+
+    // 1 رمز على الأقل
+    buf.add(symbols[rnd.nextInt(symbols.length)]);
+
+    // لو الطول المطلوب أكبر، نكمل من كل المجموعات
+    final all = upper + lower + digits + symbols;
+    while (buf.length < length) {
+      buf.add(all[rnd.nextInt(all.length)]);
+    }
+
+    // نخلط الترتيب عشان ما يكون متوقع
+    _shuffle(buf, rnd);
+
+    return buf.join();
+  }
+
+  void _shuffle(List<String> list, Random rnd) {
+    for (int i = list.length - 1; i > 0; i--) {
+      final j = rnd.nextInt(i + 1);
+      final tmp = list[i];
+      list[i] = list[j];
+      list[j] = tmp;
+    }
   }
 
   String _initials(String name) {

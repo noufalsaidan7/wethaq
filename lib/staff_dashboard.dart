@@ -1,15 +1,14 @@
-// نفس الملف الأخير اللي عطيتك إياه، لكن غيّرت استدعاء ChildAttendanceScreen لتمرير isStaffView:true
-// --- ابدأ من هنا واستبدل الملف كله ---
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'child_attendance_screen.dart';
 import 'chat_screen.dart';
+import 'widgets/validators.dart';
+import 'widgets/nice_dialogs.dart';
+import 'widgets/password_checklist.dart';
 
-//const String baseUrl = 'http://192.168.1.28:8080/wethaq';
-
+// const String baseUrl = 'http://192.168.1.28:8080/wethaq';
 const String baseUrl = 'http://10.0.2.2/wethaq';
 
 class StaffDashboard extends StatefulWidget {
@@ -157,40 +156,88 @@ class _StaffDashboardState extends State<StaffDashboard> {
     await showDialog(
       barrierDismissible: !force,
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Change password'),
-        content: TextField(
-          controller: _newPass,
-          decoration: const InputDecoration(labelText: 'New password'),
-          obscureText: true,
-        ),
-        actions: [
-          if (!force)
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: kGreen, foregroundColor: Colors.white),
-            onPressed: () async {
-              final j = await _postJson(
-                  Uri.parse('$baseUrl/change_password.php'), {
-                'user_id': '${widget.staffUserId}',
-                'new_password': _newPass.text.trim()
-              });
-              if (!mounted) return;
-              if (j != null && j['status'] == 'success') {
-                Navigator.pop(context);
-                setState(() => mustChangePassword = false);
-                _snack('Password changed');
-              } else {
-                _snack('Failed to change password');
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        bool isStrong = false;
+        return StatefulBuilder(builder: (ctx, setM) {
+          isStrong = isPasswordStrong(_newPass.text.trim());
+          return AlertDialog(
+            title: const Text('Change password'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _newPass,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'New password',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setM(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  PasswordChecklist(password: _newPass.text.trim()),
+                ],
+              ),
+            ),
+            actions: [
+              if (!force)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kGreen, foregroundColor: Colors.white),
+                onPressed: isStrong
+                    ? () async {
+                        final pass = _newPass.text.trim();
+
+                        // تأكيد إضافي برسالة لو صار أي خلل بسيط
+                        final localErr = validateStrongPassword(pass);
+                        if (localErr != null) {
+                          await showNiceErrorDialog(
+                            context,
+                            title: 'Weak password',
+                            message:
+                                'Use at least 8 characters with ≥4 letters, ≥3 digits, and ≥1 symbol.',
+                          );
+                          return;
+                        }
+
+                        final j = await _postJson(
+                            Uri.parse('$baseUrl/change_password.php'), {
+                          'user_id': '${widget.staffUserId}',
+                          'new_password': pass,
+                        });
+
+                        if (!mounted) return;
+
+                        if (j != null && j['status'] == 'success') {
+                          Navigator.pop(ctx);
+                          setState(() => mustChangePassword = false);
+                          await showNiceSuccessDialog(
+                            context,
+                            title: 'Password updated',
+                            message: 'Your password has been changed.',
+                          );
+                        } else {
+                          final errMsg = (j?['message']?.toString() ??
+                              'Failed to change password. Please try again.');
+                          await showNiceErrorDialog(
+                            context,
+                            title: 'Couldn\'t update',
+                            message: errMsg,
+                          );
+                        }
+                      }
+                    : null,
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        });
+      },
     );
   }
 
@@ -389,8 +436,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                                 staffName: widget.staffName,
                                 parentUserId: parentUserId,
                                 staffUserId: widget.staffUserId,
-                                isStaffView:
-                                    true, // <<< Staff view (تحرير + نشر)
+                                isStaffView: true, // Staff view (تحرير + نشر)
                               ),
                             ),
                           );
@@ -408,7 +454,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                           staffName: widget.staffName,
                           parentUserId: parentUserId,
                           staffUserId: widget.staffUserId,
-                          isStaffView: true, // <<< Staff view
+                          isStaffView: true, // Staff view
                         ),
                       ),
                     );
@@ -510,7 +556,8 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 _snack('Announcement sent');
                 _fetchAnnouncements();
               } else {
-                _snack('Failed to send');
+                final msg = j?['message']?.toString() ?? 'Failed to send';
+                await showNiceErrorDialog(context, message: msg);
               }
             },
             child: const Text('Send'),

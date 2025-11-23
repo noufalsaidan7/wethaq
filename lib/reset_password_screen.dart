@@ -13,6 +13,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final TextEditingController otpController = TextEditingController();
   final TextEditingController newPasswordController = TextEditingController();
 
+  final _formKey = GlobalKey<FormState>(); // ⬅️ لإدارة التحقق من النموذج
+
   String? generatedOtp;
   bool otpSent = false;
 
@@ -28,91 +30,119 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     return List.generate(6, (_) => rand.nextInt(10)).join();
   }
 
+  // ⬅️ هنا أضفنا الدالة للتحقق من قوة كلمة المرور
+  String? validateStrongPassword(String? v) {
+    final p = (v ?? '');
+    if (p.isEmpty) return 'أدخل كلمة المرور الجديدة';
+    if (p.length < 8) return 'كلمة المرور يجب أن تكون 8 خانات على الأقل';
+    final letters = RegExp(r'[A-Za-z]').allMatches(p).length;
+    final digits = RegExp(r'\d').allMatches(p).length;
+    final symbols = RegExp(r'[^A-Za-z0-9]').allMatches(p).length;
+    if (letters < 4 || digits < 3 || symbols < 1) {
+      return 'يجب أن تحتوي على ٤ حروف + ٣ أرقام + رمز واحد';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFF507C5C);
 
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Reset Password'), backgroundColor: primaryColor),
+        title: const Text('Reset Password'),
+        backgroundColor: primaryColor,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const Text('Enter your email to reset password',
-                style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                String email = emailController.text.trim();
-                if (!registeredEmails.contains(email)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Email not registered')),
-                  );
-                  return;
-                }
-                generatedOtp = _generateOtp();
-                otpSent = true;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content:
-                          Text('OTP sent to $email (demo: $generatedOtp)')),
-                );
-                setState(() {});
-              },
-              child: const Text('Send OTP'),
-            ),
-            if (otpSent) ...[
-              const SizedBox(height: 20),
-              TextField(
-                controller: otpController,
-                decoration: const InputDecoration(
-                  labelText: 'Enter OTP',
-                  border: OutlineInputBorder(),
-                ),
+        child: Form(
+          key: _formKey, // ⬅️ تفعيل التحقق
+          child: Column(
+            children: [
+              const Text(
+                'Enter your email to reset password',
+                style: TextStyle(fontSize: 18),
               ),
               const SizedBox(height: 20),
               TextField(
-                controller: newPasswordController,
-                obscureText: true,
+                controller: emailController,
                 decoration: const InputDecoration(
-                  labelText: 'New Password',
+                  labelText: 'Email',
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
-                  if (otpController.text.trim() != generatedOtp) {
+                  String email = emailController.text.trim();
+                  if (!registeredEmails.contains(email)) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invalid OTP')),
+                      const SnackBar(content: Text('Email not registered')),
                     );
                     return;
                   }
+                  generatedOtp = _generateOtp();
+                  otpSent = true;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Password reset successfully!')),
+                    SnackBar(
+                      content: Text('OTP sent to $email (demo: $generatedOtp)'),
+                    ),
                   );
-                  // إعادة تعيين الحقول
-                  emailController.clear();
-                  otpController.clear();
-                  newPasswordController.clear();
-                  otpSent = false;
-                  generatedOtp = null;
                   setState(() {});
                 },
-                child: const Text('Reset Password'),
+                child: const Text('Send OTP'),
               ),
+              if (otpSent) ...[
+                const SizedBox(height: 20),
+                TextField(
+                  controller: otpController,
+                  decoration: const InputDecoration(
+                    labelText: 'Enter OTP',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: newPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: validateStrongPassword, // ✅ تحقق من القوة
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    if (!_formKey.currentState!.validate()) {
+                      // إذا فشل التحقق نوقف العملية
+                      return;
+                    }
+
+                    if (otpController.text.trim() != generatedOtp) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Invalid OTP')),
+                      );
+                      return;
+                    }
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Password reset successfully!')),
+                    );
+                    // إعادة تعيين الحقول
+                    emailController.clear();
+                    otpController.clear();
+                    newPasswordController.clear();
+                    otpSent = false;
+                    generatedOtp = null;
+                    setState(() {});
+                  },
+                  child: const Text('Reset Password'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

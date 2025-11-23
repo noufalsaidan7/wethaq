@@ -12,7 +12,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// الدالة الموحدة للتعامل مع ضغط الإشعارات (foreground/background/terminated)
 void handleNotificationTap(Map<String, dynamic> data) {
   final type = (data['type'] ?? '').toString();
-  // تلميحات: لو تبين تربطيه الآن فعليًا، افتحي الشاشات حسب النوع:
+
   // switch (type) {
   //   case 'attendance':
   //   case 'dismissal':
@@ -28,11 +28,8 @@ void handleNotificationTap(Map<String, dynamic> data) {
   //     navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => ChatScreen(...)));
   //     break;
   //   default:
-  //     // لا شيء
+  //
   // }
-  // مؤقتًا نطبع بس للتاكيد
-  // تجاهلي الطباعة لو ما تحتاجينها
-  // debugPrint('🔔 notification tap -> type=$type | data=$data');
 }
 
 Future<void> main() async {

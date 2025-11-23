@@ -1,17 +1,14 @@
+// notification_service.dart
 import 'dart:io';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+/// بلجن الإشعارات المحلية (Android)
 final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 
-/// لازم تكون خارج main كـ top-level
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // تقدر تسوي أي لوجيك هنا للخلفية
-}
-
-/// قناة اندرويد
+/// قناة أندرويد للإشعارات ذات الأهمية العالية
 const AndroidNotificationChannel _channel = AndroidNotificationChannel(
   'high_importance_channel',
   'High Importance Notifications',
@@ -19,59 +16,106 @@ const AndroidNotificationChannel _channel = AndroidNotificationChannel(
   importance: Importance.high,
 );
 
+/// مهم: الهاندلر الخاص بإشعارات الخلفية لازم يكون top-level
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // هنا لو حبيتي مستقبلاً تتعاملين مع الإشعارات وقت ما التطبيق بالخلفية/مقفّل
+  // مثلاً: print أو حفظ في قاعدة بيانات محلية
+  debugPrint('💤 [BG] message data = ${message.data}');
+}
+
+/// تهيئة الإشعارات المحلية (FlutterLocalNotifications)
 Future<void> initLocalNotifications() async {
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidInit);
-  await _fln.initialize(initSettings);
-  // إنشاء القناة
+
+  const initSettings = InitializationSettings(
+    android: androidInit,
+  );
+
+  // تهيئة البلجن
+  await _fln.initialize(
+    initSettings,
+    // لو حبيتي تعملي شيء عند الضغط على الإشعار المحلي (payload)
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      debugPrint('🔔 Local notification tapped. payload=${response.payload}');
+      // ممكن هنا مستقبلاً تستدعين handleNotificationTap مع data من الـ payload
+    },
+  );
+
+  // إنشاء قناة أندرويد (مرة واحدة)
   await _fln
       .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(_channel);
 }
 
+/// تهيئة FCM (طلب صلاحيات + listeners)
 Future<void> initFCM() async {
-  // طلب صلاحية الاشعارات (اندرويد 13+ / iOS)
+  // طلب صلاحية الإشعارات (Android 13+ و iOS)
   final settings = await FirebaseMessaging.instance.requestPermission(
     alert: true,
     badge: true,
     sound: true,
     provisional: false,
   );
-  debugPrint('Notification permission: ${settings.authorizationStatus}');
 
-  // توكن الجهاز – انسخيه من الـ log
+  debugPrint('🔔 Notification permission = ${settings.authorizationStatus}');
+
+  // طباعة التوكن (للتأكد من التسجيل)
   final token = await FirebaseMessaging.instance.getToken();
-  debugPrint('FCM TOKEN: $token');
+  debugPrint('✅ FCM TOKEN: $token');
 
-  // هندل للخلفية
+  // تسجيل الهاندلر للباكجراوند
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  // فورجراوند: نعرض اشعار محلي
-  FirebaseMessaging.onMessage.listen((msg) async {
-    final n = msg.notification;
-    if (n != null && !kIsWeb && Platform.isAndroid) {
+  // ========================  إشعارات الـ Foreground  ========================
+  FirebaseMessaging.onMessage.listen((RemoteMessage msg) async {
+    final notification = msg.notification;
+
+    // نأخذ العنوان والنص من notification أو من data (لو جايين من PHP فقط كـ data)
+    final String title =
+        notification?.title ?? msg.data['title']?.toString() ?? '';
+    final String body =
+        notification?.body ?? msg.data['body']?.toString() ?? '';
+
+    debugPrint('📩 [FG] onMessage data=${msg.data} title=$title body=$body');
+
+    // لو ما فيه أي نص، ما نعرض إشعار
+    if (title.isEmpty && body.isEmpty) return;
+
+    // نعرض إشعار محلي فقط على أندرويد (وما يكون Web)
+    if (!kIsWeb && Platform.isAndroid) {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id,
           _channel.name,
           channelDescription: _channel.description,
+          importance: Importance.max,
           priority: Priority.high,
-          importance: Importance.high,
+          playSound: true,
         ),
       );
+
+      /// 🔥 هنا كان سبب الكراش:
+      /// لازم الـ id يكون ضمن 32-bit int
+      /// نستخدم millisecondsSinceEpoch ثم ناخذ باقي القسمة على أكبر قيمة int 32-bit
+      final int notificationId =
+          DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff);
+
       await _fln.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        n.title,
-        n.body,
+        notificationId, // ✅ id آمن
+        title,
+        body,
         details,
-        payload: msg.data.toString(),
+        payload: msg.data.toString(), // ممكن نستعمله لاحقاً لفتح شاشة معيّنة
       );
     }
   });
 
-  // لما يضغط على الاشعار ويفتح التطبيق
-  FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-    debugPrint('onMessageOpenedApp data: ${msg.data}');
+  // ========================  عند فتح الإشعار من tray  ========================
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage msg) {
+    debugPrint('📲 onMessageOpenedApp data: ${msg.data}');
+    // هنا تقدرين تستدعين handleNotificationTap(msg.data)
+    // لو حابة تفتحين شاشة معيّنة حسب type
   });
 }

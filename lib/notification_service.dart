@@ -19,7 +19,6 @@ const AndroidNotificationChannel _channel = AndroidNotificationChannel(
 /// مهم: الهاندلر الخاص بإشعارات الخلفية لازم يكون top-level
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // هنا لو حبيتي مستقبلاً تتعاملين مع الإشعارات وقت ما التطبيق بالخلفية/مقفّل
   // مثلاً: print أو حفظ في قاعدة بيانات محلية
   debugPrint('💤 [BG] message data = ${message.data}');
 }
@@ -35,7 +34,6 @@ Future<void> initLocalNotifications() async {
   // تهيئة البلجن
   await _fln.initialize(
     initSettings,
-    // لو حبيتي تعملي شيء عند الضغط على الإشعار المحلي (payload)
     onDidReceiveNotificationResponse: (NotificationResponse response) {
       debugPrint('🔔 Local notification tapped. payload=${response.payload}');
       // ممكن هنا مستقبلاً تستدعين handleNotificationTap مع data من الـ payload
@@ -96,9 +94,7 @@ Future<void> initFCM() async {
         ),
       );
 
-      /// 🔥 هنا كان سبب الكراش:
       /// لازم الـ id يكون ضمن 32-bit int
-      /// نستخدم millisecondsSinceEpoch ثم ناخذ باقي القسمة على أكبر قيمة int 32-bit
       final int notificationId =
           DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff);
 

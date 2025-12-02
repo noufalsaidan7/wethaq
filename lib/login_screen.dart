@@ -276,14 +276,6 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 28),
-                              Center(
-                                child: Text(
-                                  'Forgot your password?',
-                                  style: const TextStyle(
-                                      fontSize: 15, color: kForgot),
-                                ),
-                              ),
                             ],
                           ),
                         ),
